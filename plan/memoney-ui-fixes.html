@@ -1,0 +1,172 @@
+<!doctype html>
+<!--
+PLAN — MeMoney UI fixes (from design-review, iOS Light)
+Base: real stylesheet ../src/styles.css; the <style id="proposed"> block below is the diff to apply.
+
+1  Income text: #34c759 → #248a3d (2.2:1 → AA)
+2  Expense amounts: ink colour (no red wall); "−" sign carries meaning. Red #d70015 kept for icons only.
+3  Muted text: #8e8e93 → #6c6c70
+4  Category tiles failing 3:1 darkened: food #c93400, home #0071a4, salary #248a3d
+5  Tap targets: icon buttons 44px, chips 40px (hit area 44 via ::after), segmented 40px
+6  Add sheet: ฿0 placeholder muted; disabled ✓ = gray fill, not faded blue
+7  Settings: iOS grouped list — app header, Currency row (value + ›, opens picker), Sign out row
+8  History tab removed; Home gets −/+ filter (list icon = all) and shows the whole month (no 8-item limit)
+   Dock: Home · Stats · Settings + FAB
+9  Spacing snapped to 4/8/12/16/24; radii 10 (small) / 16 (card, key) / 24 (big); sheet keeps 38 to follow device corner
+10 Login: no card; logo + name top, full-width sign-in buttons at bottom (thumb zone)
+11 Dock: tab pill pinned left, FAB pinned right (space-between, 16px gutter)
++  Stats: month total above bars
+
+OPEN: currency picker UI (sheet vs inline list) — shown as placeholder frame note.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeMoney UI Fixes</title>
+<link rel="stylesheet" href="../src/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  /* ---- mockup page shell (not part of the app) ---- */
+  html, body { height: auto !important; overflow: auto !important; position: static !important; }
+  body { padding: 24px 16px 48px; background: #e5e5ea; }
+  .page-h { font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+  .frames { display: grid; gap: 28px 20px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+  .frame h2 { font-size: 14px; font-weight: 600; color: #3a3a3c; margin: 0 0 8px 4px; }
+  .phone { position: relative; width: 340px; max-width: 100%; height: 720px; border-radius: 44px; overflow: hidden;
+    background: var(--bg); box-shadow: 0 0 0 10px #1c1c1e; transform: translateZ(0); /* contains position:fixed */ }
+  .phone .screen { min-height: 100%; padding-top: 52px; }
+  .phone .sheet-wrap, .phone .sheet { animation: none; }
+  .note { position: absolute; left: 16px; right: 16px; bottom: 96px; padding: 8px 12px; border: 1.5px dashed #ff9500; border-radius: 10px;
+    font-size: 12px; color: #c93400; background: #fff8ec; }
+</style>
+<style id="proposed">
+  /* ---- PROPOSED CHANGES to src/styles.css ---- */
+  :root { --muted: #6c6c70; --inc: #248a3d; --exp: #d70015; }
+  .screen { gap: 16px; }
+  .tx { padding: 12px 16px; }
+  .tx + .tx::before { left: 64px; }
+  .tx .num.exp { color: var(--ink); }                       /* #2 */
+  .card, .day + .tx { border-radius: 16px 16px 0 0; }
+  .card { border-radius: 16px; }
+  .tx:last-child { border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
+  .icon-btn { width: 44px; height: 44px; }                   /* #5 */
+  .chip { height: 40px; padding: 0 16px; }
+  .seg button { height: 40px; width: 56px; }
+  .io { gap: 16px; }
+  .io .num.exp { color: var(--ink); }
+  .filter { align-self: flex-start; }                         /* #8 */
+  .amount.empty { color: var(--muted); }                      /* #6 */
+  .key { border-radius: 16px; }
+  .key.ok:disabled { opacity: 1; background: var(--fill); color: var(--muted); }
+  .dock { justify-content: space-between; padding: 0 16px; }  /* #11 tabs left, FAB right */
+  .total { font-size: 34px; font-weight: 700; letter-spacing: -1px; }
+  /* #7 settings list */
+  .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0 8px; font-size: 20px; font-weight: 700; }
+  .brand img { width: 64px; height: 64px; }
+  .set { padding: 0 16px; }
+  .set .row { min-height: 48px; padding: 0; }
+  .set .row .val { color: var(--muted); display: flex; align-items: center; gap: 4px; }
+  .set .row.danger { color: var(--exp); font-weight: 500; }
+  .set .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; }
+  .set .ico svg { width: 18px; height: 18px; }
+  /* #10 login */
+  .login2 { min-height: 100%; display: flex; flex-direction: column; justify-content: space-between; padding: 140px 24px 48px; }
+  .login2 .brand { gap: 12px; font-size: 28px; }
+  .login2 .brand img { width: 96px; height: 96px; }
+  .signin { display: flex; flex-direction: column; gap: 12px; }
+  .signin button { height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; background: var(--card); }
+  .signin button.primary { background: var(--ink); color: #fff; }
+  .signin svg { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<div class="page-h">MeMoney: UI fixes</div>
+<div class="frames" id="frames"></div>
+
+<script>
+// category colours from src/lib/categories.ts, with #4 darkened values
+const CAT = {
+  food: ['utensils', '#c93400'], transport: ['car', '#007aff'], shopping: ['shopping-bag', '#ff2d55'], bills: ['zap', '#af52de'],
+  home: ['house', '#0071a4'], health: ['heart-pulse', '#ff3b30'], fun: ['clapperboard', '#5856d6'], other: ['ellipsis', '#8e8e93'],
+  salary: ['briefcase', '#248a3d'],
+}
+const TX = [
+  ['Today', [['7-Eleven', 'food', 'expense', 185], ['Grab', 'transport', 'expense', 96]]],
+  ['Yesterday', [['Uniqlo', 'shopping', 'expense', 1290], ['Salary', 'salary', 'income', 32000]]],
+  ['Fri 25 Sept', [['Rent', 'home', 'expense', 4700]]],
+  ['Thu 24 Sept', [['Electricity', 'bills', 'expense', 1760]]],
+]
+const ic = (n, s = 20) => `<i data-lucide="${n}" width="${s}" height="${s}"></i>`
+const baht = (n) => '฿' + n.toLocaleString()
+const cat = (id) => `<span class="cat" style="background:${CAT[id][1]}">${ic(CAT[id][0])}</span>`
+
+// markup mirrors src/components/ui.tsx (MonthSwitch, Dock, TxList, TypeToggle)
+const month = `<div class="row between month"><h1>Sept 2026</h1><div class="row">
+  <button class="icon-btn">${ic('chevron-left')}</button><button class="icon-btn">${ic('chevron-right')}</button></div></div>`
+const dock = (on) => `<nav class="dock"><div class="glass tabs">
+  ${[['house', 'home'], ['chart-pie', 'stats'], ['settings', 'set']].map(([i, k]) => `<a class="${k === on ? 'active' : ''}">${ic(i, 22)}</a>`).join('')}
+  </div><button class="glass fab">${ic('plus', 28)}</button></nav>`
+const list = `<div class="card list">${TX.map(([d, items]) => `<section><div class="day">${d}</div>${items.map(([n, c, t, a]) =>
+  `<button class="row tx">${cat(c)}<div class="grow"><div>${n}</div></div>
+   <span class="num ${t === 'income' ? 'inc' : 'exp'}">${t === 'income' ? '+' : '−'}${baht(a)}</span></button>`).join('')}</section>`).join('')}</div>`
+const seg3 = `<div class="seg filter"><button class="n" aria-pressed="true">${ic('list', 18)}</button>
+  <button class="e">${ic('minus', 18)}</button><button class="i">${ic('plus', 18)}</button></div>`
+const seg2 = `<div class="seg"><button class="e" aria-pressed="true">${ic('minus', 18)}</button><button class="i">${ic('plus', 18)}</button></div>`
+
+const home = `<main class="screen">${month}
+  <section class="summary"><div class="num balance">${baht(20559)}</div>
+    <div class="io"><span><span class="num inc">+${baht(32000)}</span></span><span><span class="num exp">−${baht(11441)}</span></span></div></section>
+  ${seg3}${list}</main>${dock('home')}`
+
+const sheet = (filled) => `<main class="screen">${month}<section class="summary"><div class="num balance">${baht(20559)}</div></section></main>
+  <div class="sheet-wrap"><div class="glass sheet">
+    <div class="grab"></div>
+    <div class="row between"><button class="icon-btn">${ic('x', 22)}</button>${seg2}
+      <button class="icon-btn" style="color:var(--accent)">${ic('scan-line', 22)}</button></div>
+    <div class="amount num ${filled ? 'exp' : 'empty'}">${filled ? '฿185' : '฿0'}</div>
+    <div class="meta"><span class="chip">${ic('calendar-days', 16)}27 Sept</span><span class="chip">${ic('pen-line', 16)}</span></div>
+    <div class="cats">${['food', 'transport', 'shopping', 'bills', 'home', 'health', 'fun', 'other'].map(c =>
+      `<button aria-pressed="${filled && c === 'food'}"><span class="cat" style="background:${CAT[c][1]}">${ic(CAT[c][0], 24)}</span></button>`).join('')}</div>
+    <div class="keys">${['7', '8', '9'].map(k => `<button class="key">${k}</button>`).join('')}<button class="key del">${ic('delete', 24)}</button>
+      ${['4', '5', '6'].map(k => `<button class="key">${k}</button>`).join('')}<button class="key ok" ${filled ? '' : 'disabled'}>${ic('check', 30)}</button>
+      ${['1', '2', '3', '.', '0', '00'].map(k => `<button class="key">${k}</button>`).join('')}</div>
+  </div></div>`
+
+const statsRows = [['home', 4700], ['food', 2535], ['bills', 1760], ['shopping', 1290], ['fun', 640], ['health', 420], ['transport', 96]]
+const stats = `<main class="screen">${month}${seg2.replace('class="seg"', 'class="seg filter"')}
+  <div class="num total">${baht(11441)}</div>
+  <section class="card bars">${statsRows.map(([id, v]) => `<div class="row">${cat(id)}<div class="grow">
+    <div class="row between"><span class="muted">${Math.round(v / 11441 * 100)}%</span><span class="num">${baht(v)}</span></div>
+    <div class="bar"><i style="width:${v / 4700 * 100}%;background:${CAT[id][1]}"></i></div></div></div>`).join('')}</section></main>${dock('stats')}`
+
+const settings = `<main class="screen">
+  <div class="brand"><img src="../public/favicon.svg" alt="">MeMoney</div>
+  <section class="card set">
+    <button class="row between" style="width:100%"><span class="row"><span class="ico" style="background:#ff9500">${ic('coins')}</span>Currency</span>
+      <span class="val">฿ ${ic('chevron-right', 18)}</span></button>
+  </section>
+  <section class="card set">
+    <button class="row danger" style="width:100%"><span class="ico" style="background:#d70015">${ic('log-out')}</span>Sign out</button>
+  </section></main>${dock('set')}
+  <div class="note">OPEN: Currency row opens a picker (sheet or list). Not designed yet.</div>`
+
+const login = `<main class="login2">
+  <div class="brand"><img src="../public/favicon.svg" alt="">MeMoney</div>
+  <div class="signin">
+    <button class="primary"><svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A11.9 11.9 0 0 1 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Google</button>
+    <button>${ic('fingerprint')}Passkey</button>
+    <button>${ic('mail')}Email</button>
+  </div></main>`
+
+const FRAMES = [
+  ['Login (#10)', login], ['Home: filter, ink expenses, AA colours (#1–4, #8)', home],
+  ['Add: empty state (#6)', sheet(false)], ['Add: filled', sheet(true)],
+  ['Stats: total (+)', stats], ['Settings: iOS list (#7)', settings],
+]
+document.getElementById('frames').innerHTML = FRAMES.map(([t, body]) =>
+  `<section class="frame"><h2>${t}</h2><div class="phone">${body}</div></section>`).join('')
+lucide.createIcons()
+</script>
+</body>
+</html>

@@ -1,0 +1,388 @@
+<!doctype html>
+<!--
+PLAN — expense/income tracker (phone-only PWA, login required)
+Source pattern: consensus of Monefy / 1Money / Money Manager / Cashew (see research/expense-app.md)
+
+Screens (one frame each below):
+  1 Login        — icon buttons only: Google, passkey (fingerprint), email magic-link
+  2 Home         — month switch, balance, donut by category, recent list, big center FAB
+  3 Add          — −/+ toggle, big amount, category icon grid, numeric keypad, camera icon (OCR), ✓ save
+                   target: amount → category → ✓  (≤3 taps + digits)
+  4 Scan         — viewfinder → processing → Add prefilled (amount, date, merchant). User confirms ✓; never auto-save.
+  5 Stats        — month switch, expense/income toggle, category bars
+  6 Empty        — home with no data, arrow to FAB
+Nav: 4 slots + center FAB — Home · Stats · [+] · History · Settings
+Fields per transaction: type(expense|income), amount, category, date (default today), note (optional), receipt image (optional)
+Text: numbers only; icons carry meaning; aria-labels for a11y.
+
+OPEN:
+  - Currency (no symbol shown in mockup — placeholder)
+  - Auth provider (Supabase vs Firebase) + which login methods
+  - OCR engine: proposed Tesseract.js on-device (tha+eng) primary; Gemini free tier as opt-in fallback (free tier content used by Google)
+  - Category list final set / user-editable?
+  - Multiple accounts/wallets? (not shown — assumed single wallet)
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Expense Tracker Prototype</title>
+<style>
+:root{
+  --bg:#eef0f3; --surface:#ffffff; --surface2:#f4f5f7; --ink:#15171a; --muted:#8a9099; --line:#e6e8eb;
+  --exp:#e5484d; --inc:#2f9e6b; --accent:#3a5ccc; --accent-ink:#fff;
+  --c1:#f5a524; --c2:#3a8dde; --c3:#d9468f; --c4:#8e6cef; --c5:#12a594; --c6:#e5484d; --c7:#6b7280; --c8:#2f9e6b;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c0d0f; --surface:#17191c; --surface2:#202328; --ink:#eef0f2; --muted:#8b929b; --line:#2a2d33;
+  --accent:#6f8cff; --accent-ink:#0c0d0f;
+}}
+:root[data-theme="dark"]{--bg:#0c0d0f; --surface:#17191c; --surface2:#202328; --ink:#eef0f2; --muted:#8b929b; --line:#2a2d33; --accent:#6f8cff; --accent-ink:#0c0d0f;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:24px 16px}
+.wall{display:flex;flex-wrap:wrap;gap:28px;justify-content:center}
+.frame-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+.tag{font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.phone{width:min(360px,calc(100vw - 32px));height:740px;background:var(--surface);border-radius:36px;border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.08);overflow:hidden;position:relative;display:flex;flex-direction:column}
+.status{height:34px;flex:none}
+.body{flex:1;overflow:hidden;display:flex;flex-direction:column;padding:0 18px}
+svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.lg{width:28px;height:28px} svg.i.sm{width:18px;height:18px}
+.row{display:flex;align-items:center;gap:12px}
+.between{justify-content:space-between}
+.num{font-variant-numeric:tabular-nums;font-weight:600}
+.exp{color:var(--exp)} .inc{color:var(--inc)} .muted{color:var(--muted)}
+.iconbtn{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--ink);background:transparent;border:0}
+/* month switch */
+.month{justify-content:center;gap:18px;padding:6px 0 4px;font-weight:600}
+/* bottom nav */
+.nav{height:78px;flex:none;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);align-items:center;justify-items:center;padding-bottom:12px;background:var(--surface)}
+.nav .iconbtn{color:var(--muted)} .nav .on{color:var(--accent)}
+.fab{width:58px;height:58px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;margin-top:-26px;box-shadow:0 6px 16px rgba(58,92,204,.35)}
+.fab svg.i{width:28px;height:28px;stroke-width:2.4}
+/* category dot */
+.cat{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;flex:none}
+/* list */
+.list{display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.item{padding:9px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border:0}
+.item .grow{flex:1;min-width:0}
+.item .sub{font-size:12px;color:var(--muted)}
+.day{font-size:12px;color:var(--muted);padding:10px 0 2px}
+/* donut */
+.donut{position:relative;width:190px;height:190px;margin:8px auto 6px}
+.donut .mid{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.bal{font-size:26px}
+.pills{display:flex;gap:10px;justify-content:center;margin-bottom:6px}
+.pill{display:flex;align-items:center;gap:6px;background:var(--surface2);border-radius:999px;padding:6px 12px;font-size:14px}
+/* add screen */
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--surface2);border-radius:12px;padding:4px;width:120px}
+.seg span{display:grid;place-items:center;height:32px;border-radius:9px;color:var(--muted)}
+.seg .on-e{background:var(--exp);color:#fff} .seg .on-i{background:var(--inc);color:#fff}
+.amount{font-size:44px;text-align:right;padding:10px 4px 2px;letter-spacing:-.02em}
+.meta{justify-content:flex-end;gap:8px;color:var(--muted);font-size:13px;padding-bottom:8px}
+.chip{display:flex;align-items:center;gap:5px;background:var(--surface2);border-radius:999px;padding:5px 10px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 6px;padding:6px 0 10px}
+.grid .c{display:flex;justify-content:center}
+.grid .cat{width:48px;height:48px;border-radius:15px}
+.grid .sel{outline:3px solid var(--ink);outline-offset:2px}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:auto;padding-bottom:18px}
+.k{height:52px;border-radius:14px;background:var(--surface2);display:grid;place-items:center;font-size:22px;font-weight:500}
+.k.ok{background:var(--accent);color:var(--accent-ink);grid-row:span 2;height:auto}
+.k.ic{color:var(--muted)}
+/* login */
+.login{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:40px}
+.logo{width:88px;height:88px;border-radius:26px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center}
+.logo svg.i{width:46px;height:46px}
+.auth{display:flex;gap:16px}
+.auth .iconbtn{width:64px;height:64px;border-radius:20px;background:var(--surface2)}
+.auth svg.i{width:28px;height:28px}
+/* scan */
+.cam{flex:1;background:#111;margin:0 -18px;position:relative;display:grid;place-items:center}
+.receipt{width:62%;height:62%;background:#f6f3ea;border-radius:4px;transform:rotate(-2deg);padding:18px 14px;display:flex;flex-direction:column;gap:7px}
+.receipt i{display:block;height:6px;background:#cfc8b6;border-radius:3px}
+.corners{position:absolute;inset:14% 13%;border-radius:12px;
+  background:linear-gradient(#fff,#fff) top left/28px 3px no-repeat,linear-gradient(#fff,#fff) top left/3px 28px no-repeat,
+  linear-gradient(#fff,#fff) top right/28px 3px no-repeat,linear-gradient(#fff,#fff) top right/3px 28px no-repeat,
+  linear-gradient(#fff,#fff) bottom left/28px 3px no-repeat,linear-gradient(#fff,#fff) bottom left/3px 28px no-repeat,
+  linear-gradient(#fff,#fff) bottom right/28px 3px no-repeat,linear-gradient(#fff,#fff) bottom right/3px 28px no-repeat}
+.camtop{position:absolute;top:10px;left:14px;right:14px;display:flex;justify-content:space-between;color:#fff}
+.camtop .iconbtn{color:#fff;background:rgba(255,255,255,.12)}
+.shutterbar{height:120px;flex:none;background:#111;margin:0 -18px;display:flex;align-items:center;justify-content:space-around;color:#fff}
+.shutter{width:70px;height:70px;border-radius:50%;border:4px solid #fff;display:grid;place-items:center}
+.shutter i{width:54px;height:54px;border-radius:50%;background:#fff;display:block}
+.scanline{position:absolute;left:13%;right:13%;top:48%;height:2px;background:var(--accent);box-shadow:0 0 14px var(--accent)}
+.spin{width:54px;height:54px;border-radius:50%;border:4px solid rgba(255,255,255,.2);border-top-color:#fff;position:absolute}
+.found{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border-radius:8px}
+.thumb{width:40px;height:40px;border-radius:10px;background:#f6f3ea;display:grid;place-items:center;color:#9a927c;border:1px solid var(--line)}
+/* stats */
+.bars{display:flex;flex-direction:column;gap:14px;padding-top:8px}
+.bar{height:8px;border-radius:4px;background:var(--surface2);overflow:hidden;margin-top:6px}
+.bar b{display:block;height:100%;border-radius:4px}
+/* empty */
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:var(--muted)}
+.empty .big{width:96px;height:96px;border-radius:30px;background:var(--surface2);display:grid;place-items:center}
+.empty svg.i{width:44px;height:44px}
+.arrow{animation:bob 1.4s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(6px)}}
+@media (prefers-reduced-motion:reduce){.arrow{animation:none}}
+.flow{max-width:760px;margin:0 auto 26px}
+.flow svg{width:100%;height:auto}
+</style>
+</head>
+<body>
+
+<!-- icon sprite (Lucide-style paths, inline so it works over file://) -->
+<svg width="0" height="0" style="position:absolute">
+ <defs>
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="chart" viewBox="0 0 24 24"><path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></symbol>
+  <symbol id="food" viewBox="0 0 24 24"><path d="M3 2v7a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V2M6 2v20M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3zm0 0v7"/></symbol>
+  <symbol id="car" viewBox="0 0 24 24"><path d="M19 17h2v-4l-2-5H5l-2 5v4h2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5M3 13h18"/></symbol>
+  <symbol id="bag" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></symbol>
+  <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
+  <symbol id="heart" viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/></symbol>
+  <symbol id="film" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 7.5h4M3 12h18M3 16.5h4M17 7.5h4M17 16.5h4"/></symbol>
+  <symbol id="house" viewBox="0 0 24 24"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></symbol>
+  <symbol id="dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="brief" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
+  <symbol id="gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/></symbol>
+  <symbol id="trend" viewBox="0 0 24 24"><path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="back" viewBox="0 0 24 24"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="m18 9-6 6M12 9l6 6"/></symbol>
+  <symbol id="cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></symbol>
+  <symbol id="finger" viewBox="0 0 24 24"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4M14 13.12c0 2.38 0 6.38-1 8.88M17.29 21.02c.12-.6.43-2.3.5-3.02M2 12a10 10 0 0 1 18-6M2 16h.01M21.8 16c.2-2 .13-5.35 0-6M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2M8.65 22c.21-.66.45-1.32.57-2M9 6.8a6 6 0 0 1 9 5.2v2"/></symbol>
+  <symbol id="mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></symbol>
+  <symbol id="wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+  <symbol id="image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+  <symbol id="flash" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
+  <symbol id="receipt" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M16 8H8M16 12H8M13 16H8"/></symbol>
+  <symbol id="note" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="store" viewBox="0 0 24 24"><path d="M3 9 4.5 4h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/></symbol>
+  <symbol id="g" viewBox="0 0 24 24"><path d="M21 12.2c0-.7-.1-1.4-.2-2H12v3.8h5a4.3 4.3 0 0 1-1.9 2.8v2.3h3A9 9 0 0 0 21 12.2z"/><path d="M12 21c2.5 0 4.6-.8 6.1-2.2l-3-2.3a5.4 5.4 0 0 1-8.1-2.9H4v2.4A9 9 0 0 0 12 21z"/><path d="M7 13.6a5.4 5.4 0 0 1 0-3.5V7.7H4a9 9 0 0 0 0 8.1z"/><path d="M12 6.6c1.4 0 2.6.5 3.6 1.4l2.6-2.6A9 9 0 0 0 4 7.7l3 2.4a5.4 5.4 0 0 1 5-3.5z"/></symbol>
+ </defs>
+</svg>
+
+<!-- flow diagram -->
+<div class="flow">
+<svg viewBox="0 0 760 90" role="img" aria-label="Flow: login, home, add or scan, confirm, saved">
+ <g font-size="13" fill="currentColor" text-anchor="middle" style="color:var(--ink)">
+  <g fill="none" stroke="var(--muted)" stroke-width="1.5">
+   <rect x="2" y="25" width="100" height="40" rx="10"/><rect x="142" y="25" width="100" height="40" rx="10"/>
+   <rect x="282" y="2" width="110" height="36" rx="10"/><rect x="282" y="52" width="110" height="36" rx="10"/>
+   <rect x="432" y="25" width="140" height="40" rx="10"/><rect x="612" y="25" width="140" height="40" rx="10"/>
+   <path d="M102 45h36M242 40l36-18M242 50l36 18M392 20l36 18M392 70l36-18M572 45h36"/>
+  </g>
+  <text x="52" y="50">Login</text><text x="192" y="50">Home</text>
+  <text x="337" y="25">+ keypad</text><text x="337" y="75">scan</text>
+  <text x="502" y="50">prefilled · ✓ confirm</text><text x="682" y="50">Home updated</text>
+ </g>
+</svg>
+</div>
+
+<div class="wall">
+
+<!-- 1 LOGIN -->
+<div class="frame-wrap"><div class="tag">1 · Login</div>
+<div class="phone"><div class="status"></div>
+ <div class="body"><div class="login">
+  <div class="logo"><svg class="i"><use href="#wallet"/></svg></div>
+  <div class="auth">
+   <button class="iconbtn" aria-label="Continue with Google"><svg class="i"><use href="#g"/></svg></button>
+   <button class="iconbtn" aria-label="Passkey"><svg class="i"><use href="#finger"/></svg></button>
+   <button class="iconbtn" aria-label="Email link"><svg class="i"><use href="#mail"/></svg></button>
+  </div>
+ </div></div>
+</div></div>
+
+<!-- 2 HOME -->
+<div class="frame-wrap"><div class="tag">2 · Home</div>
+<div class="phone"><div class="status"></div>
+ <div class="body">
+  <div class="row month"><svg class="i sm muted"><use href="#left"/></svg>Sep 2026<svg class="i sm muted"><use href="#right"/></svg></div>
+  <div class="donut">
+   <svg viewBox="0 0 42 42" width="190" height="190" style="transform:rotate(-90deg)">
+    <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--surface2)" stroke-width="5"/>
+    <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--c1)" stroke-width="5" stroke-dasharray="34 66"/>
+    <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--c5)" stroke-width="5" stroke-dasharray="24 76" stroke-dashoffset="-35"/>
+    <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--c2)" stroke-width="5" stroke-dasharray="17 83" stroke-dashoffset="-60"/>
+    <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--c3)" stroke-width="5" stroke-dasharray="13 87" stroke-dashoffset="-78"/>
+    <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--c7)" stroke-width="5" stroke-dasharray="7 93" stroke-dashoffset="-92"/>
+   </svg>
+   <div class="mid"><div><div class="bal num">12,480</div><svg class="i sm muted" style="margin-top:4px"><use href="#wallet"/></svg></div></div>
+  </div>
+  <div class="pills">
+   <div class="pill"><svg class="i sm inc"><use href="#down"/></svg><span class="num inc">32,000</span></div>
+   <div class="pill"><svg class="i sm exp" style="transform:rotate(180deg)"><use href="#down"/></svg><span class="num exp">19,520</span></div>
+  </div>
+  <div class="list">
+   <div class="day">Today</div>
+   <div class="row item"><div class="cat" style="background:var(--c1)"><svg class="i"><use href="#food"/></svg></div><div class="grow">7-Eleven<div class="sub row" style="gap:4px"><svg class="i sm" style="width:13px;height:13px"><use href="#receipt"/></svg></div></div><span class="num exp">−185</span></div>
+   <div class="row item"><div class="cat" style="background:var(--c2)"><svg class="i"><use href="#car"/></svg></div><div class="grow">Grab</div><span class="num exp">−96</span></div>
+   <div class="day">Yesterday</div>
+   <div class="row item"><div class="cat" style="background:var(--c8)"><svg class="i"><use href="#brief"/></svg></div><div class="grow">Salary</div><span class="num inc">+32,000</span></div>
+  </div>
+ </div>
+ <nav class="nav">
+  <button class="iconbtn on" aria-label="Home"><svg class="i"><use href="#home"/></svg></button>
+  <button class="iconbtn" aria-label="Stats"><svg class="i"><use href="#chart"/></svg></button>
+  <div class="fab" aria-label="Add"><svg class="i"><use href="#plus"/></svg></div>
+  <button class="iconbtn" aria-label="History"><svg class="i"><use href="#list"/></svg></button>
+  <button class="iconbtn" aria-label="Settings"><svg class="i"><use href="#gear"/></svg></button>
+ </nav>
+</div></div>
+
+<!-- 3 ADD -->
+<div class="frame-wrap"><div class="tag">3 · Add (keypad)</div>
+<div class="phone"><div class="status"></div>
+ <div class="body">
+  <div class="row between" style="padding-top:4px">
+   <button class="iconbtn" aria-label="Close"><svg class="i"><use href="#x"/></svg></button>
+   <div class="seg"><span class="on-e" aria-label="Expense"><svg class="i sm"><use href="#minus"/></svg></span><span aria-label="Income"><svg class="i sm"><use href="#plus"/></svg></span></div>
+   <button class="iconbtn" aria-label="Scan receipt" style="color:var(--accent)"><svg class="i"><use href="#scan"/></svg></button>
+  </div>
+  <div class="amount num exp">185</div>
+  <div class="row meta">
+   <span class="chip"><svg class="i sm"><use href="#cal"/></svg>27</span>
+   <span class="chip"><svg class="i sm"><use href="#note"/></svg></span>
+   <span class="chip"><svg class="i sm"><use href="#camera"/></svg></span>
+  </div>
+  <div class="grid">
+   <div class="c"><div class="cat sel" style="background:var(--c1)" aria-label="Food"><svg class="i"><use href="#food"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c2)" aria-label="Transport"><svg class="i"><use href="#car"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c3)" aria-label="Shopping"><svg class="i"><use href="#bag"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c4)" aria-label="Bills"><svg class="i"><use href="#bolt"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c5)" aria-label="Home"><svg class="i"><use href="#house"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c6)" aria-label="Health"><svg class="i"><use href="#heart"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:#c47f17" aria-label="Fun"><svg class="i"><use href="#film"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c7)" aria-label="Other"><svg class="i"><use href="#dots"/></svg></div></div>
+  </div>
+  <div class="keys">
+   <div class="k">7</div><div class="k">8</div><div class="k">9</div><div class="k ic"><svg class="i"><use href="#back"/></svg></div>
+   <div class="k">4</div><div class="k">5</div><div class="k">6</div><div class="k ok" style="grid-row:span 3" aria-label="Save"><svg class="i lg"><use href="#check"/></svg></div>
+   <div class="k">1</div><div class="k">2</div><div class="k">3</div>
+   <div class="k">.</div><div class="k">0</div><div class="k">00</div>
+  </div>
+ </div>
+</div></div>
+
+<!-- 4a SCAN -->
+<div class="frame-wrap"><div class="tag">4a · Scan</div>
+<div class="phone"><div class="status" style="background:#111"></div>
+ <div class="body">
+  <div class="cam">
+   <div class="receipt"><i style="width:50%;margin:0 auto 6px"></i><i></i><i style="width:80%"></i><i></i><i style="width:70%"></i><i></i><i style="width:60%;margin-top:auto;height:9px;align-self:flex-end;background:#a99f86"></i></div>
+   <div class="corners"></div><div class="scanline"></div>
+   <div class="camtop"><button class="iconbtn" aria-label="Close"><svg class="i"><use href="#x"/></svg></button><button class="iconbtn" aria-label="Flash"><svg class="i"><use href="#flash"/></svg></button></div>
+  </div>
+  <div class="shutterbar">
+   <button class="iconbtn" style="color:#fff" aria-label="From gallery"><svg class="i lg"><use href="#image"/></svg></button>
+   <div class="shutter" aria-label="Capture"><i></i></div>
+   <button class="iconbtn" style="color:#fff" aria-label="Manual entry"><svg class="i lg"><use href="#plus"/></svg></button>
+  </div>
+ </div>
+</div></div>
+
+<!-- 4b PROCESSING -->
+<div class="frame-wrap"><div class="tag">4b · Reading</div>
+<div class="phone"><div class="status" style="background:#111"></div>
+ <div class="body">
+  <div class="cam" style="margin-bottom:0">
+   <div class="receipt" style="filter:brightness(.55)"><i style="width:50%;margin:0 auto 6px"></i><i></i><i style="width:80%"></i><i></i><i style="width:70%"></i><i></i><i style="width:60%;margin-top:auto;height:9px;align-self:flex-end;background:#a99f86"></i></div>
+   <div class="spin"></div>
+  </div>
+ </div>
+</div></div>
+
+<!-- 4c PREFILLED -->
+<div class="frame-wrap"><div class="tag">4c · Prefilled → ✓</div>
+<div class="phone"><div class="status"></div>
+ <div class="body">
+  <div class="row between" style="padding-top:4px">
+   <button class="iconbtn" aria-label="Close"><svg class="i"><use href="#x"/></svg></button>
+   <div class="seg"><span class="on-e"><svg class="i sm"><use href="#minus"/></svg></span><span><svg class="i sm"><use href="#plus"/></svg></span></div>
+   <div class="thumb" aria-label="Receipt photo"><svg class="i sm"><use href="#receipt"/></svg></div>
+  </div>
+  <div class="amount num exp"><span class="found" style="padding:0 8px">185</span></div>
+  <div class="row meta">
+   <span class="chip found"><svg class="i sm"><use href="#store"/></svg>7-Eleven</span>
+   <span class="chip found"><svg class="i sm"><use href="#cal"/></svg>27</span>
+  </div>
+  <div class="grid">
+   <div class="c"><div class="cat sel" style="background:var(--c1)"><svg class="i"><use href="#food"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c2)"><svg class="i"><use href="#car"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c3)"><svg class="i"><use href="#bag"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c4)"><svg class="i"><use href="#bolt"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c5)"><svg class="i"><use href="#house"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c6)"><svg class="i"><use href="#heart"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:#c47f17"><svg class="i"><use href="#film"/></svg></div></div>
+   <div class="c"><div class="cat" style="background:var(--c7)"><svg class="i"><use href="#dots"/></svg></div></div>
+  </div>
+  <div class="keys">
+   <div class="k">7</div><div class="k">8</div><div class="k">9</div><div class="k ic"><svg class="i"><use href="#back"/></svg></div>
+   <div class="k">4</div><div class="k">5</div><div class="k">6</div><div class="k ok" style="grid-row:span 3"><svg class="i lg"><use href="#check"/></svg></div>
+   <div class="k">1</div><div class="k">2</div><div class="k">3</div>
+   <div class="k">.</div><div class="k">0</div><div class="k">00</div>
+  </div>
+ </div>
+</div></div>
+
+<!-- 5 STATS -->
+<div class="frame-wrap"><div class="tag">5 · Stats</div>
+<div class="phone"><div class="status"></div>
+ <div class="body">
+  <div class="row month"><svg class="i sm muted"><use href="#left"/></svg>Sep 2026<svg class="i sm muted"><use href="#right"/></svg></div>
+  <div class="row" style="justify-content:center;padding:8px 0 4px">
+   <div class="seg"><span class="on-e"><svg class="i sm" style="transform:rotate(180deg)"><use href="#down"/></svg></span><span><svg class="i sm"><use href="#down"/></svg></span></div>
+  </div>
+  <div class="bars">
+   <div class="row"><div class="cat" style="background:var(--c1)"><svg class="i"><use href="#food"/></svg></div><div style="flex:1"><div class="row between"><span class="muted">34%</span><span class="num">6,640</span></div><div class="bar"><b style="width:100%;background:var(--c1)"></b></div></div></div>
+   <div class="row"><div class="cat" style="background:var(--c5)"><svg class="i"><use href="#house"/></svg></div><div style="flex:1"><div class="row between"><span class="muted">24%</span><span class="num">4,700</span></div><div class="bar"><b style="width:71%;background:var(--c5)"></b></div></div></div>
+   <div class="row"><div class="cat" style="background:var(--c2)"><svg class="i"><use href="#car"/></svg></div><div style="flex:1"><div class="row between"><span class="muted">17%</span><span class="num">3,320</span></div><div class="bar"><b style="width:50%;background:var(--c2)"></b></div></div></div>
+   <div class="row"><div class="cat" style="background:var(--c3)"><svg class="i"><use href="#bag"/></svg></div><div style="flex:1"><div class="row between"><span class="muted">13%</span><span class="num">2,540</span></div><div class="bar"><b style="width:38%;background:var(--c3)"></b></div></div></div>
+   <div class="row"><div class="cat" style="background:var(--c4)"><svg class="i"><use href="#bolt"/></svg></div><div style="flex:1"><div class="row between"><span class="muted">9%</span><span class="num">1,760</span></div><div class="bar"><b style="width:27%;background:var(--c4)"></b></div></div></div>
+   <div class="row"><div class="cat" style="background:var(--c7)"><svg class="i"><use href="#dots"/></svg></div><div style="flex:1"><div class="row between"><span class="muted">3%</span><span class="num">560</span></div><div class="bar"><b style="width:8%;background:var(--c7)"></b></div></div></div>
+  </div>
+ </div>
+ <nav class="nav">
+  <button class="iconbtn" aria-label="Home"><svg class="i"><use href="#home"/></svg></button>
+  <button class="iconbtn on" aria-label="Stats"><svg class="i"><use href="#chart"/></svg></button>
+  <div class="fab" aria-label="Add"><svg class="i"><use href="#plus"/></svg></div>
+  <button class="iconbtn" aria-label="History"><svg class="i"><use href="#list"/></svg></button>
+  <button class="iconbtn" aria-label="Settings"><svg class="i"><use href="#gear"/></svg></button>
+ </nav>
+</div></div>
+
+<!-- 6 EMPTY -->
+<div class="frame-wrap"><div class="tag">6 · Empty</div>
+<div class="phone"><div class="status"></div>
+ <div class="body">
+  <div class="row month"><svg class="i sm muted"><use href="#left"/></svg>Sep 2026<svg class="i sm muted"><use href="#right"/></svg></div>
+  <div class="empty">
+   <div class="big"><svg class="i"><use href="#wallet"/></svg></div>
+   <div class="num" style="font-size:26px;color:var(--ink)">0</div>
+   <svg class="i arrow" style="width:28px;height:28px;margin-top:60px"><use href="#down"/></svg>
+  </div>
+ </div>
+ <nav class="nav">
+  <button class="iconbtn on" aria-label="Home"><svg class="i"><use href="#home"/></svg></button>
+  <button class="iconbtn" aria-label="Stats"><svg class="i"><use href="#chart"/></svg></button>
+  <div class="fab" aria-label="Add"><svg class="i"><use href="#plus"/></svg></div>
+  <button class="iconbtn" aria-label="History"><svg class="i"><use href="#list"/></svg></button>
+  <button class="iconbtn" aria-label="Settings"><svg class="i"><use href="#gear"/></svg></button>
+ </nav>
+</div></div>
+
+</div>
+</body>
+</html>

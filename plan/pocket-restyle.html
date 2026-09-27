@@ -1,0 +1,172 @@
+<!doctype html>
+<!--
+PLAN — Pocket restyle (iOS 26 Liquid Glass, Apple-like)
+- Decided: plain backgrounds; glass ONLY on floating chrome (dock, FAB, sheet, month pill). No wallpaper.
+- Main complaint was colors: previous = rainbow wallpaper + saturated solid tiles. All options drop both.
+- Home: month title + chevrons, big balance number, ▲income ▼expense under it, inset-grouped list, glass dock + FAB.
+  Donut removed from Home per chosen layout (still used on Stats) — OPEN: confirm.
+- Add sheet: height fits content (no empty gap), grabber, −/+ toggle, scan, amount, date/note chips,
+  category grid, keypad at bottom, ✓ in accent color.
+- 4 color options to pick from:
+  A iOS Light      — #F2F2F7 grouped bg, white cards, solid iOS system-color tiles
+  B iOS Dark       — #000 bg, #1C1C1E cards, dark-mode system colors
+  C Mono Light     — white/gray, gray tiles + dark glyphs, black accent; color only for +/− amounts
+  D Tinted Dark    — near-black, translucent tinted tiles with colored glyphs, green accent
+- OPEN: which option; auto light/dark pairing (e.g. A+B, C+D) or single mode.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pocket Restyle</title>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  :root { --page:#e9e9ee; --page-ink:#1c1c1e; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --page:#111; --page-ink:#f2f2f7; } }
+  :root[data-theme='dark'] { --page:#111; --page-ink:#f2f2f7; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--page); color:var(--page-ink); font:15px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; padding:24px 16px 48px; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .lead { opacity:.6; margin-bottom:24px; }
+  .opts { display:grid; gap:36px; grid-template-columns:repeat(auto-fill, minmax(min(100%, 720px), 1fr)); }
+  .opt h2 { font-size:17px; margin:0 0 12px; display:flex; gap:8px; align-items:center; }
+  .opt h2 b { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:50%; background:var(--page-ink); color:var(--page); font-size:13px; }
+  .pair { display:flex; gap:20px; flex-wrap:wrap; }
+
+  /* ---------- phone ---------- */
+  .phone { position:relative; width:340px; max-width:100%; height:720px; border-radius:44px; overflow:hidden;
+    background:var(--bg); color:var(--ink); box-shadow:0 0 0 10px #1c1c1e, 0 20px 50px rgba(0,0,0,.25); }
+  .scroll { position:absolute; inset:0; padding:54px 16px 120px; overflow:hidden; }
+  .top { display:flex; align-items:center; justify-content:space-between; }
+  .top h3 { font-size:28px; font-weight:700; letter-spacing:-.5px; }
+  .chev { display:flex; gap:6px; }
+  .circ { width:36px; height:36px; border-radius:50%; display:grid; place-items:center; background:var(--fill); color:var(--ink); }
+  .circ svg { width:18px; height:18px; }
+  .bal { margin:22px 0 4px; font-size:44px; font-weight:700; letter-spacing:-1.5px; font-variant-numeric:tabular-nums; }
+  .io { display:flex; gap:16px; font-weight:600; font-size:15px; margin-bottom:22px; }
+  .io span { display:flex; align-items:center; gap:4px; }
+  .io svg { width:16px; height:16px; }
+  .inc { color:var(--inc); } .exp { color:var(--exp); }
+  .day { font-size:13px; font-weight:600; color:var(--mute); text-transform:uppercase; margin:14px 4px 6px; }
+  .card { background:var(--card); border-radius:18px; overflow:hidden; }
+  .tx { display:flex; align-items:center; gap:12px; padding:10px 14px; position:relative; }
+  .tx + .tx::before { content:""; position:absolute; top:0; left:62px; right:0; height:.5px; background:var(--sep); }
+  .tx .name { flex:1; font-size:16px; }
+  .tx .amt { font-weight:600; font-variant-numeric:tabular-nums; }
+  .tile { width:36px; height:36px; border-radius:10px; display:grid; place-items:center; flex:none; background:var(--c); color:#fff; }
+  .tile svg { width:20px; height:20px; }
+
+  /* glass: floating chrome only */
+  .glass { background:var(--glass); backdrop-filter:blur(22px) saturate(180%); -webkit-backdrop-filter:blur(22px) saturate(180%);
+    box-shadow:inset 0 0.5px 0 var(--rim), 0 0 0 .5px var(--edge), 0 8px 24px rgba(0,0,0,.12); }
+  .dock { position:absolute; left:16px; right:16px; bottom:26px; display:flex; gap:10px; align-items:center; }
+  .tabs { flex:1; height:60px; border-radius:30px; display:flex; justify-content:space-around; align-items:center; padding:0 6px; }
+  .tabs span { width:52px; height:48px; border-radius:24px; display:grid; place-items:center; color:var(--mute); }
+  .tabs span.on { color:var(--accent); background:var(--fill); }
+  .tabs svg { width:24px; height:24px; }
+  .fab { width:60px; height:60px; border-radius:50%; display:grid; place-items:center; background:var(--accent); color:var(--on-accent);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 8px 20px rgba(0,0,0,.2); }
+  .fab svg { width:28px; height:28px; stroke-width:2.4; }
+
+  /* add sheet */
+  .dim { position:absolute; inset:0; background:rgba(0,0,0,.25); }
+  .sheet { position:absolute; left:6px; right:6px; bottom:6px; border-radius:38px; padding:8px 16px 18px; background:var(--sheet); }
+  .grab { width:36px; height:5px; border-radius:3px; background:var(--sep2); margin:0 auto 10px; }
+  .bar { display:flex; justify-content:space-between; align-items:center; }
+  .seg { display:flex; background:var(--fill); border-radius:20px; padding:3px; }
+  .seg span { width:52px; height:32px; border-radius:17px; display:grid; place-items:center; color:var(--mute); }
+  .seg span.on { background:var(--card); color:var(--exp); box-shadow:0 1px 4px rgba(0,0,0,.12); }
+  .seg svg { width:18px; height:18px; stroke-width:2.6; }
+  .big { text-align:center; font-size:48px; font-weight:700; letter-spacing:-1.5px; margin:14px 0 8px; font-variant-numeric:tabular-nums; }
+  .chips { display:flex; gap:8px; justify-content:center; margin-bottom:16px; }
+  .chip { display:flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:16px; background:var(--fill); font-size:14px; font-weight:500; }
+  .chip svg { width:16px; height:16px; }
+  .cats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px 8px; margin-bottom:16px; }
+  .cats .tile { width:52px; height:52px; border-radius:16px; margin:auto; }
+  .cats .tile svg { width:24px; height:24px; }
+  .cats .sel { box-shadow:0 0 0 2.5px var(--sheet), 0 0 0 5px var(--accent); }
+  .keys { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .key { height:50px; border-radius:14px; background:var(--key); display:grid; place-items:center; font-size:22px; font-weight:500; }
+  .key svg { width:22px; height:22px; }
+  .key.ok { grid-row:span 3; height:auto; background:var(--accent); color:var(--on-accent); }
+  .key.ok svg { width:28px; height:28px; stroke-width:2.8; }
+
+  /* ---------- 4 palettes ---------- */
+  .A { --bg:#f2f2f7; --card:#fff; --ink:#000; --mute:#8e8e93; --sep:#c6c6c8; --sep2:#c7c7cc; --fill:rgba(118,118,128,.12);
+       --inc:#34c759; --exp:#ff3b30; --accent:#007aff; --on-accent:#fff; --glass:rgba(255,255,255,.62); --rim:rgba(255,255,255,.9); --edge:rgba(0,0,0,.06);
+       --sheet:#f2f2f7; --key:#fff; }
+  .B { --bg:#000; --card:#1c1c1e; --ink:#fff; --mute:#8e8e93; --sep:#38383a; --sep2:#48484a; --fill:rgba(118,118,128,.24);
+       --inc:#30d158; --exp:#ff453a; --accent:#0a84ff; --on-accent:#fff; --glass:rgba(40,40,44,.6); --rim:rgba(255,255,255,.18); --edge:rgba(255,255,255,.06);
+       --sheet:#1c1c1e; --key:#2c2c2e; }
+  .C { --bg:#fff; --card:#f5f5f7; --ink:#1d1d1f; --mute:#86868b; --sep:#e0e0e3; --sep2:#d2d2d7; --fill:rgba(0,0,0,.05);
+       --inc:#1f9d55; --exp:#1d1d1f; --accent:#1d1d1f; --on-accent:#fff; --glass:rgba(255,255,255,.7); --rim:rgba(255,255,255,.95); --edge:rgba(0,0,0,.08);
+       --sheet:#fff; --key:#f5f5f7; }
+  .C .tile { background:#e8e8ed; color:#1d1d1f; }
+  .D { --bg:#0b0d0c; --card:#161a18; --ink:#f2f5f3; --mute:#7d8a83; --sep:#26302b; --sep2:#3a4540; --fill:rgba(255,255,255,.07);
+       --inc:#3ddc84; --exp:#ff6b6b; --accent:#3ddc84; --on-accent:#062012; --glass:rgba(28,34,31,.6); --rim:rgba(255,255,255,.14); --edge:rgba(255,255,255,.05);
+       --sheet:#141816; --key:#1f2522; }
+  .D .tile { background:color-mix(in srgb, var(--c) 20%, transparent); color:var(--c); }
+  .D .fab svg, .D .key.ok svg { color:var(--on-accent); }
+</style>
+</head>
+<body>
+<h1>Pocket: 4 colour options</h1>
+<p class="lead">iOS 26 glass: plain background, glass only on the dock, + button and sheet.</p>
+<div class="opts" id="opts"></div>
+
+<script>
+// iOS system colours, keyed by the app's category ids (lib/categories.ts)
+const CAT = {
+  food:{i:'utensils', c:'#ff9500'}, transport:{i:'car', c:'#007aff'}, shopping:{i:'shopping-bag', c:'#ff2d55'},
+  bills:{i:'zap', c:'#af52de'}, home:{i:'house', c:'#30b0c7'}, health:{i:'heart-pulse', c:'#ff3b30'},
+  fun:{i:'clapperboard', c:'#5856d6'}, other:{i:'ellipsis', c:'#8e8e93'}, salary:{i:'briefcase', c:'#34c759'},
+}
+const TX = [
+  { day:'Today', items:[['7-Eleven','food',-185],['Grab','transport',-96]] },
+  { day:'Yesterday', items:[['Uniqlo','shopping',-1290],['Salary','salary',32000]] },
+  { day:'Fri 25 Sept', items:[['Rent','home',-4700]] },
+]
+const OPTS = [['A','iOS Light'],['B','iOS Dark'],['C','Mono Light'],['D','Tinted Dark']]
+const fmt = (n) => (n < 0 ? '−' : '+') + '฿' + Math.abs(n).toLocaleString()
+const ic = (n) => `<i data-lucide="${n}"></i>`
+const tile = (id, sel) => `<span class="tile${sel ? ' sel' : ''}" style="--c:${CAT[id].c}">${ic(CAT[id].i)}</span>`
+
+const home = () => `
+  <div class="scroll">
+    <div class="top"><h3>September</h3><div class="chev"><span class="circ">${ic('chevron-left')}</span><span class="circ">${ic('chevron-right')}</span></div></div>
+    <div class="bal">฿20,559</div>
+    <div class="io"><span class="inc">${ic('arrow-down-left')}฿32,000</span><span class="exp">${ic('arrow-up-right')}฿11,441</span></div>
+    ${TX.map(g => `<div class="day">${g.day}</div><div class="card">${g.items.map(([n, c, a]) =>
+      `<div class="tx">${tile(c)}<span class="name">${n}</span><span class="amt ${a > 0 ? 'inc' : 'exp'}">${fmt(a)}</span></div>`).join('')}</div>`).join('')}
+  </div>
+  <div class="dock">
+    <div class="glass tabs"><span class="on">${ic('house')}</span><span>${ic('chart-pie')}</span><span>${ic('list')}</span><span>${ic('settings')}</span></div>
+    <span class="glass fab">${ic('plus')}</span>
+  </div>`
+
+const add = () => `
+  ${home()}
+  <div class="dim"></div>
+  <div class="sheet glass">
+    <div class="grab"></div>
+    <div class="bar"><span class="circ">${ic('x')}</span>
+      <div class="seg"><span class="on">${ic('minus')}</span><span>${ic('plus')}</span></div>
+      <span class="circ" style="color:var(--accent)">${ic('scan-line')}</span></div>
+    <div class="big exp">฿185</div>
+    <div class="chips"><span class="chip">${ic('calendar-days')}27 Sept</span><span class="chip">${ic('pen-line')}</span></div>
+    <div class="cats">${['food','transport','shopping','bills','home','health','fun','other'].map(c => tile(c, c === 'food')).join('')}</div>
+    <div class="keys">
+      ${['7','8','9'].map(k => `<span class="key">${k}</span>`).join('')}<span class="key">${ic('delete')}</span>
+      ${['4','5','6'].map(k => `<span class="key">${k}</span>`).join('')}<span class="key ok">${ic('check')}</span>
+      ${['1','2','3','.','0','00'].map(k => `<span class="key">${k}</span>`).join('')}
+    </div>
+  </div>`
+
+document.getElementById('opts').innerHTML = OPTS.map(([k, name]) => `
+  <section class="opt"><h2><b>${k}</b>${name}</h2>
+    <div class="pair"><div class="phone ${k}">${home()}</div><div class="phone ${k}">${add()}</div></div>
+  </section>`).join('')
+lucide.createIcons()
+</script>
+</body>
+</html>
