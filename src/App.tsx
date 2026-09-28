@@ -34,9 +34,52 @@ function Shell() {
   )
 }
 
+const IDLE_MS = 15 * 60_000
+const ACTIVE_KEY = 'memoney.active'
+
+/** Signs out after 15 minutes without a tap or keypress, counting time the app was closed or in the background. */
+function useIdleLogout(sessionId: string | undefined) {
+  useEffect(() => {
+    if (!sessionId) return
+    let last = Date.now()
+    try {
+      // "<session id> <ms>": a timestamp left by an older session doesn't count
+      const [id, ms] = (localStorage.getItem(ACTIVE_KEY) ?? '').split(' ')
+      if (id === sessionId && Number(ms)) last = Number(ms)
+    } catch { /* ignore */ }
+    const save = () => {
+      try { localStorage.setItem(ACTIVE_KEY, `${sessionId} ${last}`) } catch { /* ignore */ }
+    }
+    let out = false
+    const check = () => {
+      if (out || Date.now() - last <= IDLE_MS) return
+      out = true
+      void authClient.signOut().then(() => window.location.reload())
+    }
+    const touch = () => {
+      check()
+      last = Date.now()
+      save()
+    }
+    check()
+    save()
+    const timer = setInterval(check, 30_000)
+    window.addEventListener('pointerdown', touch)
+    window.addEventListener('keydown', touch)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('pointerdown', touch)
+      window.removeEventListener('keydown', touch)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [sessionId])
+}
+
 export default function App() {
   const { data, isPending } = authClient.useSession()
   const userId = data?.user.id
+  useIdleLogout(data?.session.id)
   useEffect(() => {
     if (userId) repo.load().catch((e) => console.error('[repo]', e))
   }, [userId])

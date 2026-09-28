@@ -1,10 +1,16 @@
 import { Fingerprint } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { authClient } from '../lib/auth'
 
 // New accounts start with Google; a passkey can be added in Settings afterwards.
 export function Login() {
   const [failed, setFailed] = useState(false)
+  const navigate = useNavigate()
+  // whatever screen the session ended on, signing in starts at Home
+  useEffect(() => {
+    navigate('/', { replace: true })
+  }, [navigate])
   const google = () => authClient.signIn.social({ provider: 'google', callbackURL: '/' })
   const passkey = async () => {
     const r = await authClient.signIn.passkey()
