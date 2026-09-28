@@ -1,4 +1,4 @@
-import { ChartPie, ChevronLeft, ChevronRight, House, Plus, Settings } from 'lucide-react'
+import { ChartPie, ChevronLeft, ChevronRight, House, Plus, Settings, Shield } from 'lucide-react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { category } from '../lib/categories'
 import { dayLabel, money, monthLabel, shiftMonth } from '../lib/format'
@@ -32,13 +32,14 @@ export function MonthSwitch() {
   )
 }
 
-export function Dock() {
+export function Dock({ admin = false }: { admin?: boolean }) {
   const navigate = useNavigate()
   const location = useLocation()
   const tabs = [
     { to: '/', icon: House, label: 'Home' },
     { to: '/stats', icon: ChartPie, label: 'Stats' },
     { to: '/settings', icon: Settings, label: 'Settings' },
+    ...(admin ? [{ to: '/admin', icon: Shield, label: 'Admin' }] : []),
   ]
   return (
     <nav className="dock">

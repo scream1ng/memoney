@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { CATEGORIES } from '../src/lib/categories.ts'
+import type { UsageRecorder } from './usage.ts'
 import type { Guess } from '../src/lib/types.ts'
 
 const MAX_BYTES = 10 * 1024 * 1024
@@ -36,13 +37,14 @@ function validate(value: unknown): Guess {
   return result
 }
 
-export function parseRoutes(getUserId: (request: Request) => Promise<string | undefined>, origin: string) {
-  const app = new Hono()
+export function parseRoutes(getUserId: (request: Request) => Promise<string | undefined>, origin: string, record?: UsageRecorder) {
+  const app = new Hono<{ Variables: { userId: string } }>()
   const requests = new Map<string, { count: number; expires: number }>()
 
   app.use('*', async (c, next) => {
     const userId = await getUserId(c.req.raw)
     if (!userId) return c.json({ error: 'Please sign in again.' }, 401)
+    c.set('userId', userId)
     if (c.req.header('origin') && c.req.header('origin') !== origin) return c.json({ error: 'Invalid origin.' }, 403)
     c.header('Cache-Control', 'no-store')
     const now = Date.now()
@@ -79,22 +81,33 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
 
     const signal = AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(60_000)])
     const headers = { Authorization: `Bearer ${key}` }
+    const trackedFetch = async (url: string, init: RequestInit, model: string) => {
+      const finish = await record?.(c.get('userId'), kind, model)
+      const response = await fetch(url, init)
+      const data = await response.json() as { usage?: unknown; status?: string; text?: unknown }
+      try {
+        await finish?.(data.usage, response.ok ? (data.status ?? 'completed') : 'failed')
+      } catch {
+        // The initial row remains unpriced; preserve a result the user already paid for.
+        console.error('[usage] Could not finalize API usage; cost remains unavailable.')
+      }
+      if (!response.ok) throw new Error(`upstream ${response.status}`)
+      return data
+    }
     try {
       let heard: string | undefined
       if (kind === 'audio') {
         const audio = new FormData()
         audio.set('file', file, `recording.${audioTypes[mime]}`)
         audio.set('model', 'gpt-4o-mini-transcribe')
-        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers, body: audio, signal })
-        if (!response.ok) throw new Error(`transcription ${response.status}`)
-        const transcript = await response.json() as { text?: unknown }
+        const transcript = await trackedFetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers, body: audio, signal }, 'gpt-4o-mini-transcribe')
         if (typeof transcript.text !== 'string' || !transcript.text.trim()) return c.json({ error: 'No speech detected. Try recording again.' }, 422)
         heard = transcript.text.trim().slice(0, 8000)
       }
 
       const content: Record<string, string>[] = [{ type: 'input_text', text: heard ?? 'Read this receipt.' }]
       if (kind === 'image') content.push({ type: 'input_image', image_url: `data:${mime};base64,${Buffer.from(await file.arrayBuffer()).toString('base64')}`, detail: 'high' })
-      const response = await fetch('https://api.openai.com/v1/responses', {
+      const output = await trackedFetch('https://api.openai.com/v1/responses', {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, signal,
         body: JSON.stringify({
           model: 'gpt-6-luna', store: false, max_output_tokens: 2000,
@@ -110,9 +123,7 @@ Return null for missing or uncertain fields. Unrelated content must return all n
             type: 'object', properties, required: Object.keys(properties), additionalProperties: false,
           } } },
         }),
-      })
-      if (!response.ok) throw new Error(`parse ${response.status}`)
-      const output = await response.json() as { status?: string; output?: { type: string; content?: { type: string; text?: string }[] }[] }
+      }, 'gpt-6-luna') as { status?: string; output?: { type: string; content?: { type: string; text?: string }[] }[] }
       if (output.status !== 'completed') throw new Error('incomplete response')
       const text = output.output?.filter((item) => item.type === 'message').flatMap((item) => item.content ?? [])
         .filter((item) => item.type === 'output_text').map((item) => item.text ?? '').join('')

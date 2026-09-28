@@ -6,6 +6,7 @@ import { getMigrations } from 'better-auth/db/migration'
 import { Hono } from 'hono'
 import pg from 'pg'
 import type { Tx } from '../src/lib/types.ts'
+import { usageSchema, usageRecorder, usageRoutes } from './usage.ts'
 import { parseRoutes } from './parse.ts'
 
 pg.types.setTypeParser(20, Number) // bigint → number
@@ -47,6 +48,8 @@ await db.query(`
   create index if not exists transactions_user_date on transactions (user_id, date desc);
 `)
 
+await db.query(usageSchema)
+
 type Vars = { Variables: { userId: string } }
 const app = new Hono<Vars>()
 
@@ -55,7 +58,12 @@ app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 app.route('/api/parse', parseRoutes(async (request) => {
   const session = await auth.api.getSession({ headers: request.headers })
   return session?.user.id
-}, new URL(baseURL).origin))
+}, new URL(baseURL).origin, usageRecorder(db)))
+
+app.route('/api/usage', usageRoutes(db, async (request) => {
+  const session = await auth.api.getSession({ headers: request.headers })
+  return session?.user
+}))
 
 app.use('/api/tx/*', async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers })

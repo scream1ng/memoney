@@ -143,3 +143,42 @@ describe('camera and voice API', () => {
     expect((await app.request('/', upload())).status).toBe(502)
   })
 })
+
+describe('usage attribution', () => {
+  it('retains transcription usage when the second voice call fails', async () => {
+    const finish = vi.fn().mockResolvedValue(undefined)
+    const record = vi.fn().mockResolvedValue(finish)
+    fetchMock.mockResolvedValueOnce(Response.json({ text: 'coffee 145', usage: { input_tokens: 20, output_tokens: 4 } }))
+      .mockResolvedValueOnce(Response.json({ error: 'failed' }, { status: 500 }))
+    const app = parseRoutes(async () => 'member', origin, record)
+    expect((await app.request('/', upload('audio', 'audio/webm'))).status).toBe(502)
+    expect(record.mock.calls).toEqual([['member', 'audio', 'gpt-4o-mini-transcribe'], ['member', 'audio', 'gpt-6-luna']])
+    expect(finish.mock.calls).toEqual([[{ input_tokens: 20, output_tokens: 4 }, 'completed'], [undefined, 'failed']])
+  })
+  it('records usage before validating an incomplete model result', async () => {
+    const finish = vi.fn().mockResolvedValue(undefined)
+    const record = vi.fn().mockResolvedValue(finish)
+    fetchMock.mockResolvedValueOnce(Response.json({ status: 'incomplete', usage: { input_tokens: 100, output_tokens: 2000 } }))
+    expect((await parseRoutes(async () => 'member', origin, record).request('/', upload())).status).toBe(502)
+    expect(finish).toHaveBeenCalledWith({ input_tokens: 100, output_tokens: 2000 }, 'incomplete')
+  })
+  it('does not spend when the initial usage write fails', async () => {
+    const record = vi.fn().mockRejectedValue(new Error('database unavailable'))
+    expect((await parseRoutes(async () => 'member', origin, record).request('/', upload())).status).toBe(502)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+it('preserves a paid-for result if finalizing its usage record fails', async () => {
+  const finish = vi.fn().mockRejectedValue(new Error('database unavailable'))
+  const record = vi.fn().mockResolvedValue(finish)
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    fetchMock.mockResolvedValueOnce(completion())
+    const response = await parseRoutes(async () => 'member', origin, record).request('/', upload())
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ amount: 14500, merchant: 'Coffee Shop' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledWith('[usage] Could not finalize API usage; cost remains unavailable.')
+  } finally { log.mockRestore() }
+})
