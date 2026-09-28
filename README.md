@@ -12,21 +12,18 @@ Run `npm run dev:api` and `npm run dev` in separate terminals. Camera/microphone
 access requires HTTPS or localhost, and the user must be signed in.
 
 - Receipt photos are resized to a 1600px long edge and sent to `gpt-6-luna`.
-- Voice uses browser speech recognition for up to 30 seconds, or the phone
-  keyboard's dictation. Review or correct the text before Luna extracts the
-  transaction. Recognition language follows the browser language.
+- Voice records up to 30 seconds, transcribes with `gpt-4o-mini-transcribe`,
+  then uses Luna to extract the transaction. Thai and English are supported.
 - Review the suggested fields, then press Save. Parsing never saves a transaction.
 - Uploads are capped at 10 MB, with 10 requests/minute/user per server process.
   The rate limit resets on restart; it is not an account spending limit.
 - Photo attachments remain temporary in the open sheet; they are not persisted.
-- Photos and voice text are sent to OpenAI for processing. Browser speech
-  recognition may send audio to the browser's recognition service.
-  Responses use `store: false`.
+- Photos and recordings are sent to OpenAI for processing. Responses use `store: false`.
 
 Validation: `npm test`, `npm run build`, `npm run lint`.
 
-References: [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna),
-[browser speech recognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition),
+API references: [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna),
+[transcription](https://developers.openai.com/api/docs/guides/speech-to-text),
 [structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 
 ### API usage
@@ -41,7 +38,7 @@ with new camera/voice calls after deployment; old activity cannot be reconstruct
 Each upstream call is recorded before sending, and its token counters, estimated
 USD cost and price snapshot are saved when available. Lost responses and missing
 usage appear as unpriced calls, excluded from partial totals. No photos, audio or
-transcripts are stored in this table. A voice entry makes one Luna API call.
+transcripts are stored in this table. A voice entry can make two API calls.
 
 Periods use Australia/Melbourne calendar dates, Monday-start weeks, and exclusive
 end boundaries. Prices use Standard rates checked 2026-09-28 from the
