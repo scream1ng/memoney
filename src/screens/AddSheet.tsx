@@ -1,4 +1,4 @@
-import { CalendarDays, Camera, Check, ChevronRight, Delete, Ellipsis, LoaderCircle, Mic, PenLine, Square, Store, Trash2, TriangleAlert, X } from 'lucide-react'
+import { CalendarDays, Camera, Check, ChevronRight, Delete, Ellipsis, LoaderCircle, Mic, NotebookPen, PenLine, Square, Store, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TypeToggle } from '../components/ui'
@@ -418,7 +418,7 @@ function Sheet() {
       </div>
     </SubSheet>
   )
-  const fileInput = <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+  const fileInput = <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
 
   // Camera / Voice drafts and saved entries share the card layout
   if (review || existing) {
@@ -461,17 +461,18 @@ function Sheet() {
                 </>
               ) : (
                 <>
-                  <label className="review-note">
+                  <label className="review-row">
+                    <span className="tile note"><NotebookPen size={22} /></span>
                     <span className="value"><small>Note</small>
                       <input value={note} placeholder="Add a note" maxLength={80} onChange={(e) => { setNote(e.target.value); unhint('note') }} />
                     </span>
                     {hints.has('note') && dot}
                   </label>
                   {(existing || capture?.kind === 'image') && (
-                    <button className="review-receipt" onClick={() => (photoUrl ? setSub('photo') : fileRef.current?.click())}>
-                      {photoUrl ? <img className="thumb" src={photoUrl} alt="" /> : <span className="add"><Camera size={22} /></span>}
+                    <button className="review-row" onClick={() => (photoUrl ? setSub('photo') : fileRef.current?.click())}>
+                      {photoUrl ? <img className="tile" src={photoUrl} alt="" /> : <span className="tile add"><Camera size={22} /></span>}
                       <span className="value"><small>Receipt</small><strong>{photoUrl ? 'View photo' : 'Add receipt photo'}</strong></span>
-                      {photoUrl && <ChevronRight size={16} className="chev" />}
+                      <ChevronRight size={16} className="chev" />
                     </button>
                   )}
                   {photoError && <div className="warn" role="alert"><TriangleAlert size={18} />{photoError}</div>}
