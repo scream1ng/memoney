@@ -1,0 +1,138 @@
+<!doctype html>
+<!--
+MeMoney voice entry preview, 2026-09-28.
+Screen: Add sheet, showing Listening → Reading → Review.
+Fields and controls match src/screens/AddSheet.tsx; styles come from ../src/styles.css.
+Recording ends after about 2 seconds of silence following speech, or after 8 seconds
+with no speech. Stop remains available. The line is flat in silence and rises with voice.
+This preview simulates states; it does not use the microphone, API, or saved data.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MeMoney · Voice entry preview</title>
+  <link rel="stylesheet" href="../src/styles.css">
+  <style>
+    html, body { height: auto !important; overflow: auto !important; position: static !important; }
+    body { padding: 24px 16px 48px; background: #e5e5ea; }
+    .preview { max-width: 430px; margin: auto; }
+    .preview h1 { font-size: 20px; margin-bottom: 12px; }
+    .controls { display: flex; gap: 6px; margin-bottom: 20px; }
+    .controls button { flex: 1; height: 40px; border-radius: 999px; background: var(--card); font-size: 13px; font-weight: 600; }
+    .controls button[aria-pressed="true"] { background: var(--ink); color: var(--card); }
+    .phone { position: relative; height: 760px; border-radius: 42px; overflow: hidden; background: var(--bg); box-shadow: 0 0 0 8px #1c1c1e; }
+    .phone .screen { padding-top: 56px; }
+    .phone .sheet-wrap { position: absolute; animation: none; }
+    .phone .sheet { max-height: none; animation: none; overflow: visible; }
+    .phone .sheet-wrap, .phone .sheet { pointer-events: none; }
+    .demo { display: block; margin: 18px auto 0; padding: 10px 18px; border-radius: 999px; background: var(--card); font-size: 14px; font-weight: 600; }
+    .caption { margin-top: 18px; text-align: center; color: #3a3a3c; font-size: 13px; }
+    .icon { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .chip .icon { width: 16px; height: 16px; }
+    .seg .icon { width: 18px; height: 18px; }
+    .round.voice-stop .icon { width: 14px; height: 14px; }
+  </style>
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="calendar" viewBox="0 0 24 24"><path d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
+    <symbol id="minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="pen" viewBox="0 0 24 24"><path d="M12 20h9M3 17.5V21h3.5L18 9.5 14.5 6 3 17.5ZM13 7.5l3.5 3.5M14.5 6l2-2a2.1 2.1 0 0 1 3 0l.5.5a2.1 2.1 0 0 1 0 3l-2 2"/></symbol>
+    <symbol id="food" viewBox="0 0 24 24"><path d="M4 3v7a3 3 0 0 0 6 0V3M7 3v18M19 21V3c-4 2-5 6-5 10h5"/></symbol>
+    <symbol id="car" viewBox="0 0 24 24"><path d="m5 11 1.6-5h10.8L19 11M3 11h18v7H3zM5 18v2m14-2v2M7 14h.01M17 14h.01"/></symbol>
+    <symbol id="shopping" viewBox="0 0 24 24"><path d="M4 8h16l-1 13H5L4 8ZM9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+    <symbol id="zap" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></symbol>
+    <symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="camera" viewBox="0 0 24 24"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="4"/></symbol>
+    <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></symbol>
+    <symbol id="square" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/></symbol>
+    <symbol id="backspace" viewBox="0 0 24 24"><path d="M10 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H10L2 12l8-8ZM13 9l5 6m0-6-5 6"/></symbol>
+  </svg>
+  <main class="preview">
+    <h1>Voice entry</h1>
+    <nav class="controls" aria-label="Preview state">
+      <button data-state="listening" aria-pressed="true">Listening</button>
+      <button data-state="reading" aria-pressed="false">Reading</button>
+      <button data-state="review" aria-pressed="false">Review</button>
+    </nav>
+    <div class="phone" id="phone"></div>
+    <button class="demo" id="demo">Play voice demo</button>
+    <p class="caption" id="caption">The waveform responds while you speak. Recording ends after a pause.</p>
+  </main>
+  <script>
+    const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#${name}"></use></svg>`
+    const cats = [
+      ['Food', 'food', '#c93400'], ['Transport', 'car', '#007aff'],
+      ['Shopping', 'shopping', '#ff2d55'], ['Bills', 'zap', '#af52de'],
+    ]
+    const captions = {
+      listening: 'The waveform responds while you speak. Recording ends after a pause.',
+      reading: 'After about 2 seconds of silence, the recording is sent for parsing.',
+      review: 'Guessed details appear in blue. Nothing saves until you tap Save.',
+    }
+    let demoTimers = []
+    let waveTimer
+    function render(state, speaking = false) {
+      clearInterval(waveTimer)
+      const result = state === 'review'
+      const listening = state === 'listening'
+      const catrow = cats.map(([label, name, color], i) => `<button ${result && i === 0 ? 'class="hint" aria-pressed="true"' : 'aria-pressed="false"'}><span class="cat" style="background:${color}">${icon(name)}</span><span class="lbl">${label}</span></button>`).join('')
+      const panel = listening
+        ? `<div class="ai-panel voice-panel" aria-live="polite"><div class="voice-status"><span class="voice-dot"></span>Listening</div><svg class="voice-wave" viewBox="0 0 160 56" aria-hidden="true"><path d="M 0 28 L 160 28"></path></svg><div><div class="lbl">Speak naturally</div><div class="sub">Stops automatically when you finish</div></div></div>`
+        : state === 'reading'
+          ? `<div class="ai-panel"><svg class="icon spin accent" style="width:36px;height:36px"><use href="#loader"></use></svg><div class="lbl">Reading what you said…</div><div class="sub">You can review the details before saving.</div></div>`
+          : `<div class="keys">${['7','8','9','4','5','6','1','2','3','.','0'].map(k => `<button class="key">${k}</button>`).join('')}<button class="key del">${icon('backspace')}</button></div>`
+      document.getElementById('phone').innerHTML = `
+        <main class="screen"><div class="row between month"><h1>September 2026</h1></div><section class="summary"><div class="num balance">฿20,559</div></section></main>
+        <div class="sheet-wrap"><div class="glass sheet" role="dialog" aria-label="Add">
+          <div class="handle"><div class="grab"></div><div class="row between">
+            <span class="chip ${result ? 'date-off hint' : ''}">${icon('calendar')}${result ? 'Yesterday' : 'Today'}</span>
+            <div class="seg"><button class="e" aria-pressed="true">${icon('minus')}</button><button class="i">${icon('plus')}</button></div>
+          </div></div>
+          <div class="amount num ${result ? 'exp hint' : 'empty'}">${result ? '฿250' : '฿0'}</div>
+          <div class="meta"><span class="chip ${result ? 'hint' : 'ph'}">${icon('pen')}${result ? 'กาแฟ' : 'Note'}</span></div>
+          ${result ? '<div class="heard">“กาแฟ สองร้อยห้าสิบ เมื่อวาน”</div><div class="review-hint">Review the highlighted details before saving.</div>' : ''}
+          <div class="catrow">${catrow}<button><span class="cat more">${icon('more')}</span><span class="lbl">More</span></button></div>
+          ${panel}
+          <div class="bottom"><button class="round" aria-label="Add receipt photo">${icon('camera')}</button>
+            <button class="round ${listening ? 'voice-stop' : ''}" aria-label="${listening ? 'Stop recording' : 'Voice entry'}">${icon(listening ? 'square' : 'mic')}${listening ? 'Stop' : ''}</button>
+            <button class="save" ${result ? '' : 'disabled'}>Save</button></div>
+        </div></div>`
+      document.querySelectorAll('.controls button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.state === state)))
+      document.getElementById('caption').textContent = captions[state]
+      if (speaking) {
+        let frame = 0
+        waveTimer = setInterval(() => {
+          const points = ['M 0 28', 'L 20 28']
+          for (let i = 1; i < 30; i++) {
+            const taper = Math.min(1, i / 5, (30 - i) / 5)
+            const height = Math.sin(i * 1.7 + frame) * Math.sin(i * .43 - frame * .2) * 21 * taper
+            points.push(`L ${20 + i * 4} ${28 + height}`)
+          }
+          points.push('L 140 28', 'L 160 28')
+          document.querySelector('.voice-wave path')?.setAttribute('d', points.join(' '))
+          frame += .65
+        }, 90)
+      }
+    }
+    document.querySelectorAll('.controls button').forEach(button => button.addEventListener('click', () => {
+      demoTimers.forEach(clearTimeout)
+      render(button.dataset.state)
+    }))
+    document.getElementById('demo').addEventListener('click', () => {
+      demoTimers.forEach(clearTimeout)
+      render('listening')
+      demoTimers = [
+        setTimeout(() => render('listening', true), 500),
+        setTimeout(() => render('listening'), 3000),
+        setTimeout(() => render('reading'), 5000),
+        setTimeout(() => render('review'), 6500),
+      ]
+    })
+    render('listening')
+  </script>
+</body>
+</html>

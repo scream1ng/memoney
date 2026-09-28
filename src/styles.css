@@ -222,13 +222,11 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .ai-panel .lbl { font-size: 15px; font-weight: 600; }
 .ai-panel .sub { font-size: 13px; color: var(--muted); }
 .accent { color: var(--accent); }
-.pulse {
-  width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--exp);
-  box-shadow: 0 0 0 10px color-mix(in srgb, var(--exp) 16%, transparent), 0 0 0 20px color-mix(in srgb, var(--exp) 8%, transparent);
-}
-.wave { display: flex; gap: 3px; align-items: center; height: 24px; }
-.wave i { width: 3px; height: 24px; border-radius: 2px; background: var(--exp); animation: wave 0.9s ease-in-out infinite; }
-@keyframes wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+.voice-panel { gap: 20px; }
+.voice-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.voice-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--exp); }
+.voice-wave { width: 160px; height: 56px; }
+.voice-wave path { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .thumb { width: 64px; height: 84px; border-radius: 10px; object-fit: cover; box-shadow: 0 0 0 0.5px var(--sep), 0 4px 12px rgba(0, 0, 0, 0.12); }
 .warn {
   display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; font-size: 13px;
@@ -244,7 +242,8 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 }
 .round:active { transform: scale(0.92); }
 .round:disabled { color: var(--muted); cursor: default; }
-.round.rec, .round.armed { background: var(--exp); color: #fff; }
+.round.armed { background: var(--exp); color: #fff; }
+.round.voice-stop { width: 86px; border-radius: 999px; display: flex; gap: 8px; justify-content: center; background: var(--ink); color: var(--card); font-size: 14px; font-weight: 600; }
 .round .dot { position: absolute; top: 6px; right: 6px; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card); }
 .save {
   margin-left: auto; width: 136px; min-width: 88px; height: 56px; border-radius: 999px; flex: 0 1 136px;
