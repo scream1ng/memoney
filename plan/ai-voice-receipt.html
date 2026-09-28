@@ -1,0 +1,191 @@
+<!doctype html>
+<!--
+PLAN: MeMoney Add sheet with AI voice + receipt (GitHub issue #1, updated 2026-09-28)
+Base: real stylesheet ../src/styles.css; <style id="proposed"> below is the diff to apply.
+
+NEW ADD SHEET LAYOUT (issue #1 "Add sheet")
+- No X button. Close by dragging down or tapping outside.
+- Top row: date chip left (blue when not today), −/+ toggle right.
+- Amount: thousands separators (฿1,250), 46px shrinking to 26px min, one line.
+- Meta: note chip shows category name in grey when empty. Merchant chip appears only when the AI fills it in.
+- Category row: 4 most-used categories with labels + More (52px icons, ~10px gap). Income: 4 categories, no More.
+- Keypad: 3 columns (7-9 / 4-6 / 1-3 / . 0 ⌫). No 00, no ✓ in the keypad.
+- Bottom row: camera + mic (56pt round) on the left, Save (~136px, disabled until amount + category) on the right.
+
+AI FLOW (replaces tesseract OCR + webkitSpeechRecognition)
+- Mic tap: the keypad area becomes a listening panel (MediaRecorder). Tap again (or stop) to send the audio.
+- Camera tap: the phone's own menu (camera / library / file). The photo is compressed on the phone (~150 KB).
+- Both: the keypad area shows a "Reading…" state. The server route /api/parse (logged in, rate-limited)
+  calls the AI model and returns { type, amount, category, date, note, merchant }.
+- Guessed fields are highlighted in blue (amount, date, category, note, merchant). Nothing saves automatically.
+  Editing a field clears its blue highlight.
+- Voice: the transcript is shown as one muted line under the chips so the user can check what was heard.
+- Receipt: the photo stays attached (blue dot on the camera).
+- Failure: an inline message in place of the keypad top; the photo stays attached and the keypad works as normal.
+
+OPEN (marked with orange notes in the frames)
+- Exact model ("ChatGPT luna"?), pricing, limits.
+- Rate limit per user (number TBD).
+- Maximum recording length (TBD).
+- Attachment storage: column vs table, DB vs Railway volume.
+- Keep or drop the merchant column (the AI can fill it in).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeMoney AI Entry</title>
+<link rel="stylesheet" href="../src/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  /* ---- mockup page shell (not part of the app) ---- */
+  /* Safari: only html scrolls; body/sheets must not be scroll containers or block overscroll */
+  html { height: auto !important; overflow-y: auto !important; overscroll-behavior: auto !important; }
+  body { height: auto !important; overflow: visible !important; position: static !important; overscroll-behavior: auto !important; }
+  .phone .sheet-wrap { position: absolute; }
+  .phone .sheet { overflow: visible; max-height: none; }
+  body { padding: 24px 16px 48px; background: #e5e5ea; }
+  .page-h { font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+  .frames { display: grid; gap: 28px 20px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+  .frame h2 { font-size: 14px; font-weight: 600; color: #3a3a3c; margin: 0 0 8px 4px; }
+  .phone { position: relative; width: 340px; max-width: 100%; height: 720px; border-radius: 44px; overflow: hidden;
+    background: var(--bg); box-shadow: 0 0 0 10px #1c1c1e; transform: translateZ(0); /* contains position:fixed */ }
+  .phone .screen { min-height: 100%; padding-top: 52px; }
+  .phone .sheet-wrap, .phone .sheet { animation: none; }
+  .note { max-width: 340px; margin: 0 0 12px; padding: 8px 12px; border: 1.5px dashed #ff9500; border-radius: 10px;
+    font-size: 12px; color: #c93400; background: #fff8ec; }
+  .flow { grid-column: 1 / -1; }
+  .diagram { background: #fff; border-radius: 20px; padding: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .diagram .box { padding: 12px 14px; border-radius: 12px; background: var(--fill); font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .diagram .box small { display: block; font-weight: 400; color: var(--muted); }
+  .diagram .box.srv { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .diagram .box.open { background: #fff8ec; border: 1.5px dashed #ff9500; color: #c93400; }
+  .diagram .arr { color: var(--muted); font-size: 20px; }
+</style>
+<style id="proposed">
+  /* ---- PROPOSED CHANGES to src/styles.css (Add sheet) ---- */
+  .sheet { gap: 10px; }
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  .chip.date-off { color: var(--accent); }
+  .amount { font-size: 46px; white-space: nowrap; word-break: normal; }   /* JS shrinks down to 26px */
+  .chip.ph { color: var(--muted); }
+  .heard { text-align: center; font-size: 13px; color: var(--muted); margin-top: -4px; }
+
+  .catrow { display: flex; justify-content: space-between; padding: 2px 0; }
+  .catrow button { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 60px; font-size: 12px; color: var(--muted); }
+  .catrow .cat { width: 52px; height: 52px; border-radius: 16px; }
+  .catrow .cat svg { width: 24px; height: 24px; }
+  .catrow .more { background: var(--fill); color: var(--ink); }
+  .catrow button[aria-pressed='true'] .cat { box-shadow: 0 0 0 2.5px var(--bg), 0 0 0 5px var(--accent); }
+  .catrow button[aria-pressed='true'] { color: var(--ink); font-weight: 600; }
+  .catrow button.hint span:last-child { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 6px; padding: 0 5px; }
+
+  .keys3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .keys3 .key { height: 50px; }
+
+  /* AI panel takes the keypad's space: same height, so the sheet doesn't jump */
+  .ai-panel { height: 224px; border-radius: 16px; background: var(--card);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
+  .ai-panel .lbl { font-size: 15px; font-weight: 600; }
+  .ai-panel .sub { font-size: 13px; color: var(--muted); }
+  .pulse { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--exp);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--exp) 16%, transparent), 0 0 0 20px color-mix(in srgb, var(--exp) 8%, transparent); }
+  .wave { display: flex; gap: 3px; align-items: center; height: 24px; }
+  .wave i { width: 3px; border-radius: 2px; background: var(--exp); }
+  .thumb { width: 64px; height: 84px; border-radius: 10px; background: repeating-linear-gradient(#fff 0 6px, #e5e5ea 6px 8px);
+    box-shadow: 0 0 0 0.5px var(--sep), 0 4px 12px rgba(0,0,0,.12); }
+  .warn { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; font-size: 13px;
+    background: color-mix(in srgb, var(--exp) 10%, transparent); color: var(--exp); }
+
+  .bottom { display: flex; align-items: center; gap: 10px; }
+  .round { position: relative; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--card); color: var(--accent); }
+  .round.rec { background: var(--exp); color: #fff; }
+  .round .dot { position: absolute; top: 6px; right: 6px; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card); }
+  .save { margin-left: auto; width: 136px; height: 56px; border-radius: 999px; font-weight: 600; font-size: 17px;
+    background: var(--accent); color: var(--accent-ink); }
+  .save:disabled { background: var(--fill); color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page-h">MeMoney: AI voice + receipt entry (issue #1)</div>
+<div class="frames" id="frames"></div>
+
+<script>
+// category icons/colours from src/lib/categories.ts
+const CAT = {
+  food: ['Food', 'utensils', '#c93400'], transport: ['Transport', 'car', '#007aff'],
+  shopping: ['Shopping', 'shopping-bag', '#ff2d55'], bills: ['Bills', 'zap', '#af52de'],
+}
+const ic = (n, s = 20) => `<i data-lucide="${n}" width="${s}" height="${s}"></i>`
+const bg = `<main class="screen"><div class="row between month"><h1>Sept 2026</h1></div>
+  <section class="summary"><div class="num balance">฿20,559</div></section></main>`
+
+const keypad = `<div class="keys3">${['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0'].map(k => `<button class="key">${k}</button>`).join('')}
+  <button class="key del">${ic('delete', 24)}</button></div>`
+
+// s: { amount, date, dateOff, note, merchant, cat, hints:Set, heard, panel, rec, attached }
+function sheet(s) {
+  const h = (k) => (s.hints || new Set()).has(k) ? 'hint' : ''
+  const cats = Object.entries(CAT).map(([id, [label, icon, color]]) =>
+    `<button aria-pressed="${s.cat === id}" class="${s.cat === id ? h('cat') : ''}">
+      <span class="cat" style="background:${color}">${ic(icon, 24)}</span><span>${label}</span></button>`).join('')
+  const noteChip = s.note
+    ? `<span class="chip ${h('note')}">${ic('pen-line', 16)}${s.note}</span>`
+    : `<span class="chip ph">${ic('pen-line', 16)}${s.cat ? CAT[s.cat][0] : 'Note'}</span>`
+  return `${bg}<div class="sheet-wrap"><div class="glass sheet">
+    <div class="grab"></div>
+    <div class="top">
+      <span class="chip ${s.dateOff ? 'date-off' : ''} ${h('date')}">${ic('calendar-days', 16)}${s.date || 'Today'}</span>
+      <div class="seg"><button class="e" aria-pressed="true">${ic('minus', 18)}</button><button class="i">${ic('plus', 18)}</button></div>
+    </div>
+    <div class="amount num ${s.amount ? 'exp' : 'empty'} ${h('amount')}">${s.amount || '฿0'}</div>
+    <div class="meta">${s.merchant ? `<span class="chip ${h('merchant')}">${ic('store', 16)}${s.merchant}</span>` : ''}${noteChip}</div>
+    ${s.heard ? `<div class="heard">“${s.heard}”</div>` : ''}
+    <div class="catrow">${cats}<button><span class="cat more">${ic('ellipsis', 24)}</span><span>More</span></button></div>
+    ${s.panel || keypad}
+    <div class="bottom">
+      <button class="round">${ic('camera', 24)}${s.attached ? '<span class="dot"></span>' : ''}</button>
+      <button class="round ${s.rec ? 'rec' : ''}">${ic(s.rec ? 'square' : 'mic', s.rec ? 18 : 24)}</button>
+      <button class="save" ${s.amount && s.cat && !s.busy ? '' : 'disabled'}>Save</button>
+    </div>
+  </div></div>`
+}
+
+const wave = `<div class="wave">${[8, 16, 22, 12, 20, 24, 10, 18, 14, 22, 8, 16, 12].map(v => `<i style="height:${v}px"></i>`).join('')}</div>`
+const listening = `<div class="ai-panel"><div class="pulse">${ic('mic', 30)}</div>${wave}
+  <div><div class="lbl">Listening…</div><div class="sub">“coffee 250 yesterday” · tap ■ to finish</div></div></div>`
+const reading = (what) => `<div class="ai-panel">${what === 'photo' ? '<div class="thumb"></div>' : ''}
+  <span style="color:var(--accent)">${ic('loader-circle', 36)}</span>
+  <div><div class="lbl">Reading ${what === 'photo' ? 'receipt' : 'what you said'}…</div></div></div>`
+const failed = `<div style="display:flex;flex-direction:column;gap:8px">
+  <div class="warn">${ic('triangle-alert', 18)}Couldn’t read the receipt. The photo is attached, so type the amount.</div>
+  ${keypad.replace('class="keys3"', 'class="keys3" style="grid-auto-rows:40px"').replaceAll('class="key"', 'class="key" style="height:40px"').replace('class="key del"', 'class="key del" style="height:40px"')}</div>`
+
+const FRAMES = [
+  ['1 · Add: new layout, empty', sheet({})],
+  ['2 · Voice: listening', sheet({ panel: listening, rec: true }), 'maximum recording length TBD'],
+  ['3 · Voice: AI reading', sheet({ panel: reading('voice'), busy: true }), 'model ("ChatGPT luna"?) + per-user rate limit TBD'],
+  ['4 · Voice: result, guesses in blue', sheet({
+    amount: '฿250', date: 'Yesterday', dateOff: true, note: 'กาแฟ', cat: 'food',
+    hints: new Set(['amount', 'date', 'note', 'cat']), heard: 'กาแฟ สองร้อยห้าสิบ เมื่อวาน' })],
+  ['5 · Receipt: AI reading photo', sheet({ panel: reading('photo'), busy: true, attached: true })],
+  ['6 · Receipt: result + attached', sheet({
+    amount: '฿1,250', date: '26 Sept', dateOff: true, merchant: 'Big C', cat: 'shopping',
+    hints: new Set(['amount', 'date', 'merchant', 'cat']), attached: true }),
+    'attachment storage (column vs table, DB vs Railway volume) · keep merchant column?'],
+  ['7 · Receipt: AI failed, type it', sheet({ panel: failed, attached: true, cat: 'food' })],
+]
+document.getElementById('frames').innerHTML = FRAMES.map(([t, body, open]) =>
+  `<section class="frame"><h2>${t}</h2>${open ? `<div class="note">OPEN: ${open}</div>` : ''}<div class="phone">${body}</div></section>`).join('') + `
+  <section class="frame flow"><h2>Flow</h2><div class="diagram">
+    <div class="box">🎤 Audio / 📷 Photo<small>MediaRecorder · image compressed to ~150 KB</small></div><span class="arr">→</span>
+    <div class="box srv">POST /api/parse<small>login check · rate limit · API key in Railway variable</small></div><span class="arr">→</span>
+    <div class="box open">AI model<small>“ChatGPT luna”, TBD</small></div><span class="arr">→</span>
+    <div class="box srv">JSON fields<small>type · amount · category · date · note · merchant</small></div><span class="arr">→</span>
+    <div class="box">Add sheet<small>blue guesses · user checks · Save</small></div><span class="arr">→</span>
+    <div class="box open">Photo saved as attachment<small>storage TBD (DB change)</small></div>
+  </div></section>`
+lucide.createIcons()
+</script>
+</body>
+</html>
