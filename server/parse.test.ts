@@ -127,7 +127,9 @@ describe('camera and voice API', () => {
   it('does not invent an expense for empty speech', async () => {
     const app = parseRoutes(async () => 'user', origin)
     expect((await app.request('/', spoken(' '))).status).toBe(400)
-    expect((await app.request('/', upload('audio', 'audio/webm'))).status).toBe(400)
+    const outdated = await app.request('/', upload('audio', 'audio/webm'))
+    expect(outdated.status).toBe(400)
+    expect(await outdated.json()).toEqual({ error: 'Voice entry changed. Refresh this page, or fully close and reopen MeMoney.' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
