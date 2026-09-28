@@ -12,7 +12,7 @@ type Field = 'type' | 'amount' | 'date' | 'cat' | 'note' | 'merchant'
 type Phase = 'idle' | 'requesting' | 'rec' | 'busy' | 'failed'
 
 const MAX_REC_MS = 30_000
-const SILENCE_MS = 2_000
+const SILENCE_MS = 1_000
 const NO_SPEECH_MS = 8_000
 const FLAT_WAVE = 'M 0 28 L 160 28'
 

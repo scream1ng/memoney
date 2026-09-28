@@ -53,7 +53,7 @@ export function Usage({ admin = false }: { admin?: boolean }) {
           </div>}
         </>}
       </div>
-      <p className="sub usage-note">New activity only; earlier usage wasn’t recorded. Voice entries can use two API calls. Weeks start Monday; dates use Melbourne time. Estimates exclude tax and may differ from OpenAI billing.</p>
+      <p className="sub usage-note">New activity only. Voice may use two calls; costs are estimates.</p>
     </section>
   )
 }

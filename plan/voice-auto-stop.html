@@ -3,7 +3,7 @@
 MeMoney voice entry preview, 2026-09-28.
 Screen: Add sheet, showing Listening → Reading → Review.
 Fields and controls match src/screens/AddSheet.tsx; styles come from ../src/styles.css.
-Recording ends after about 2 seconds of silence following speech, or after 8 seconds
+Recording ends after about 1 second of silence following speech, or after 8 seconds
 with no speech. Stop remains available. The line is flat in silence and rises with voice.
 This preview simulates states; it does not use the microphone, API, or saved data.
 -->
@@ -70,7 +70,7 @@ This preview simulates states; it does not use the microphone, API, or saved dat
     ]
     const captions = {
       listening: 'The waveform responds while you speak. Recording ends after a pause.',
-      reading: 'After about 2 seconds of silence, the recording is sent for parsing.',
+      reading: 'After about 1 second of silence, the recording is sent for parsing.',
       review: 'Guessed details appear in blue. Nothing saves until you tap Save.',
     }
     let demoTimers = []
@@ -128,8 +128,8 @@ This preview simulates states; it does not use the microphone, API, or saved dat
       demoTimers = [
         setTimeout(() => render('listening', true), 500),
         setTimeout(() => render('listening'), 3000),
-        setTimeout(() => render('reading'), 5000),
-        setTimeout(() => render('review'), 6500),
+        setTimeout(() => render('reading'), 4000),
+        setTimeout(() => render('review'), 5500),
       ]
     })
     render('listening')

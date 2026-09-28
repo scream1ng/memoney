@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authClient } from '../lib/auth'
 
-// New accounts start with Google; a passkey can be added in Settings afterwards.
+// New accounts start with Google; passkey setup is offered after sign-in.
 export function Login() {
   const [failed, setFailed] = useState(false)
   const navigate = useNavigate()
@@ -22,7 +22,7 @@ export function Login() {
       <div className="signin">
         <button className="primary" onClick={google}><GoogleG />Continue with Google</button>
         <button onClick={passkey}><Fingerprint size={20} />Passkey</button>
-        {failed && <p className="muted" role="alert" style={{ textAlign: 'center', fontSize: 14 }}>No passkey yet? Sign in with Google, then add one in Settings.</p>}
+        {failed && <p className="muted" role="alert" style={{ textAlign: 'center', fontSize: 14 }}>No passkey yet? Continue with Google to set one up.</p>}
       </div>
     </main>
   )
