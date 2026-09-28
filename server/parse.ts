@@ -5,10 +5,6 @@ import type { UsageRecorder } from './usage.ts'
 import type { Guess } from '../src/lib/types.ts'
 
 const MAX_BYTES = 10 * 1024 * 1024
-const audioTypes: Record<string, string> = {
-  'audio/webm': 'webm', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3',
-  'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/ogg': 'ogg',
-}
 const properties = {
   type: { type: ['string', 'null'], enum: ['expense', 'income', null] },
   amount: { type: ['integer', 'null'], description: 'Amount in minor units: 12.50 = 1250.' },
@@ -58,33 +54,34 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
     requests.set(userId, entry)
     await next()
   })
-  app.use('*', bodyLimit({ maxSize: MAX_BYTES, onError: (c) => c.json({ error: 'File is too large. Use a smaller photo or shorter recording.' }, 413) }))
+  app.use('*', bodyLimit({ maxSize: MAX_BYTES, onError: (c) => c.json({ error: 'File is too large. Use a smaller photo.' }, 413) }))
 
   app.post('/', async (c) => {
     const key = process.env.OPENAI_API_KEY
     if (!key) return c.json({ error: 'Camera and voice aren’t configured yet. You can still type your entry.' }, 503)
     let body: FormData
     try { body = await c.req.formData() } catch { return c.json({ error: 'Invalid upload.' }, 400) }
-    const file = body.get('file')
     const kind = body.get('kind')
     const today = body.get('today')
     const currency = body.get('currency')
-    if (!(file instanceof File) || !file.size || !validDate(today) || typeof currency !== 'string' || currency.length > 8) {
+    const file = body.get('file')
+    const photo = file instanceof File ? file : undefined
+    const spoken = body.get('text')
+    if ((kind !== 'audio' && kind !== 'image') || !validDate(today) || typeof currency !== 'string' || currency.length > 8) {
       return c.json({ error: 'Invalid upload.' }, 400)
     }
-    const mime = file.type.split(';')[0]
-    if ((kind !== 'audio' && kind !== 'image') ||
-      (kind === 'image' && !['image/jpeg', 'image/png', 'image/webp'].includes(mime)) ||
-      (kind === 'audio' && !audioTypes[mime])) {
-      return c.json({ error: 'Unsupported file. Use a photo or microphone recording.' }, 415)
-    }
+    if (kind === 'image' && !photo?.size) return c.json({ error: 'Invalid upload.' }, 400)
+    if (kind === 'image' && !['image/jpeg', 'image/png', 'image/webp'].includes(photo?.type.split(';')[0] ?? ''))
+      return c.json({ error: 'Unsupported photo.' }, 415)
+    const heard = typeof spoken === 'string' ? spoken.trim() : ''
+    if (kind === 'audio' && (file !== null || !heard || heard.length > 8000)) return c.json({ error: 'Enter what you said and try again.' }, 400)
 
     const signal = AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(60_000)])
     const headers = { Authorization: `Bearer ${key}` }
     const trackedFetch = async (url: string, init: RequestInit, model: string) => {
       const finish = await record?.(c.get('userId'), kind, model)
       const response = await fetch(url, init)
-      const data = await response.json() as { usage?: unknown; status?: string; text?: unknown }
+      const data = await response.json() as { usage?: unknown; status?: string }
       try {
         await finish?.(data.usage, response.ok ? (data.status ?? 'completed') : 'failed')
       } catch {
@@ -95,18 +92,8 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
       return data
     }
     try {
-      let heard: string | undefined
-      if (kind === 'audio') {
-        const audio = new FormData()
-        audio.set('file', file, `recording.${audioTypes[mime]}`)
-        audio.set('model', 'gpt-4o-mini-transcribe')
-        const transcript = await trackedFetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers, body: audio, signal }, 'gpt-4o-mini-transcribe')
-        if (typeof transcript.text !== 'string' || !transcript.text.trim()) return c.json({ error: 'No speech detected. Try recording again.' }, 422)
-        heard = transcript.text.trim().slice(0, 8000)
-      }
-
-      const content: Record<string, string>[] = [{ type: 'input_text', text: heard ?? 'Read this receipt.' }]
-      if (kind === 'image') content.push({ type: 'input_image', image_url: `data:${mime};base64,${Buffer.from(await file.arrayBuffer()).toString('base64')}`, detail: 'high' })
+      const content: Record<string, string>[] = [{ type: 'input_text', text: kind === 'audio' ? heard : 'Read this receipt.' }]
+      if (kind === 'image' && photo) content.push({ type: 'input_image', image_url: `data:${photo.type.split(';')[0]};base64,${Buffer.from(await photo.arrayBuffer()).toString('base64')}`, detail: 'high' })
       const output = await trackedFetch('https://api.openai.com/v1/responses', {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, signal,
         body: JSON.stringify({
@@ -129,7 +116,7 @@ Return null for missing or uncertain fields. Unrelated content must return all n
         .filter((item) => item.type === 'output_text').map((item) => item.text ?? '').join('')
       const result = validate(JSON.parse(text ?? ''))
       if (!result.amount && !result.category && !result.date && !result.merchant) return c.json({ error: 'No expense or income found. Try again or type your entry.' }, 422)
-      return c.json({ ...result, ...(heard ? { heard } : {}) })
+      return c.json({ ...result, ...(kind === 'audio' ? { heard } : {}) })
     } catch {
       return c.json({ error: signal.aborted ? 'Reading took too long. Try again.' : 'Couldn’t read that right now. Try again or type your entry.' }, 502)
     }
