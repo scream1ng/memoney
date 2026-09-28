@@ -74,7 +74,8 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
     if (kind === 'image' && !['image/jpeg', 'image/png', 'image/webp'].includes(photo?.type.split(';')[0] ?? ''))
       return c.json({ error: 'Unsupported photo.' }, 415)
     const heard = typeof spoken === 'string' ? spoken.trim() : ''
-    if (kind === 'audio' && (file !== null || !heard || heard.length > 8000)) return c.json({ error: 'Enter what you said and try again.' }, 400)
+    if (kind === 'audio' && file !== null) return c.json({ error: 'Voice entry changed. Refresh this page, or fully close and reopen MeMoney.' }, 400)
+    if (kind === 'audio' && (!heard || heard.length > 8000)) return c.json({ error: 'Enter what you said and try again.' }, 400)
 
     const signal = AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(60_000)])
     const headers = { Authorization: `Bearer ${key}` }
