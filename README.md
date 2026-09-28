@@ -17,7 +17,7 @@ access requires HTTPS or localhost, and the user must be signed in.
 - Review the suggested fields, then press Save. Parsing never saves a transaction.
 - Uploads are capped at 10 MB, with 10 requests/minute/user per server process.
   The rate limit resets on restart; it is not an account spending limit.
-- Photo attachments remain temporary in the open sheet; they are not persisted.
+- Receipt photos are re-encoded on the phone to a JPEG (1600px long edge) and stored in Postgres (`attachments`, one per transaction, deleted with it). Only `server/photos.ts` knows where they live.
 - Photos and recordings are sent to OpenAI for processing. Responses use `store: false`.
 
 Validation: `npm test`, `npm run build`, `npm run lint`.

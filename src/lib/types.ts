@@ -23,4 +23,6 @@ export interface Tx {
   note?: string
   merchant?: string
   createdAt: number
+  /** set when a receipt photo is stored; also its version for the photo URL */
+  photoAt?: number
 }

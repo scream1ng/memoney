@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { TypeToggle } from '../components/ui'
 import { clearCapture, peekCapture, type Capture } from '../lib/capture'
 import { CATEGORIES, category } from '../lib/categories'
+import { toJpeg } from '../lib/image'
 import { amountToInput, dayLabel, money, parseAmount, today, uid } from '../lib/format'
 import { parse, type Guess } from '../lib/parse'
 import { currencyAtom, repo, useAtom, useTransactions } from '../lib/store'
@@ -25,6 +26,14 @@ function group(input: string): string {
 }
 
 export function AddSheet() {
+  const { id } = useParams()
+  const all = useTransactions()
+  // the fields start from the transaction, so wait until the list has loaded
+  if (id && !all.some((t) => t.id === id)) return null
+  return <Sheet key={id} />
+}
+
+function Sheet() {
   const { id } = useParams()
   const all = useTransactions()
   const existing = all.find((t) => t.id === id)
@@ -59,8 +68,10 @@ export function AddSheet() {
   const [source, setSource] = useState<'audio' | 'image'>(capture?.kind ?? 'image')
   const [heard, setHeard] = useState('')
   const [parseError, setParseError] = useState('')
-  // kept in memory only until attachment storage is decided (issue #1)
-  const [photo, setPhoto] = useState<Blob | undefined>(capture?.kind === 'image' ? capture.file : undefined)
+  // a new JPEG to attach, null = removed, undefined = unchanged (the stored one, if any)
+  const [photo, setPhoto] = useState<Blob | null>()
+  const [photoError, setPhotoError] = useState('')
+  const [shrinking, setShrinking] = useState(0) // Save waits, or the photo would be dropped
   const fileRef = useRef<HTMLInputElement>(null)
   const recRef = useRef<MediaRecorder | null>(null)
   const parseReq = useRef<AbortController | null>(null)
@@ -79,7 +90,9 @@ export function AddSheet() {
   const drag = useDragClose(close)
   const amount = parseAmount(input)
   const working = phase === 'requesting' || phase === 'rec' || phase === 'busy'
-  const canSave = amount > 0 && !!cat && !working
+  const canSave = amount > 0 && !!cat && !working && !shrinking
+  const changed = !existing || photo !== undefined || type !== existing.type || amount !== existing.amount || cat !== existing.category ||
+    date !== existing.date || note.trim() !== (existing.note ?? '') || merchant.trim() !== (existing.merchant ?? '')
   const unhint = (f: Field) => setHints((h) => (h.has(f) ? new Set([...h].filter((x) => x !== f)) : h))
 
   const top = useMemo(() => {
@@ -91,8 +104,18 @@ export function AddSheet() {
     ? [...top.slice(0, 3), category(extra)]
     : top
 
-  const photoUrl = useMemo(() => photo && URL.createObjectURL(photo), [photo])
-  useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl) }, [photoUrl])
+  const localUrl = useMemo(() => photo && URL.createObjectURL(photo), [photo])
+  useEffect(() => () => { if (localUrl) URL.revokeObjectURL(localUrl) }, [localUrl])
+  const photoUrl = localUrl ?? (photo === undefined && existing?.photoAt ? `/api/tx/${existing.id}/photo?v=${existing.photoAt}` : undefined)
+
+  function attach(file: Blob) {
+    setPhotoError('')
+    setShrinking((n) => n + 1)
+    toJpeg(file).then((jpeg) => alive.current && setPhoto(jpeg), (err) => {
+      console.error('[photo]', err)
+      if (alive.current) setPhotoError('Couldn’t use that image. Try another photo.')
+    }).finally(() => alive.current && setShrinking((n) => n - 1))
+  }
 
   // stop the mic if the sheet closes mid-recording
   useEffect(() => {
@@ -108,7 +131,11 @@ export function AddSheet() {
   // deferred a tick so StrictMode's dev remount doesn't start it twice
   useEffect(() => {
     if (!capture) return
-    const t = setTimeout(() => void (capture.kind === 'image' ? run(capture.file, 'image') : startMic(capture.stream)))
+    const t = setTimeout(() => {
+      if (capture.kind === 'audio') return void startMic(capture.stream)
+      attach(capture.file)
+      void run(capture.file, 'image')
+    })
     return () => clearTimeout(t)
   }, [capture]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -198,9 +225,10 @@ export function AddSheet() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    setPhoto(file)
+    attach(file)
     setSub(undefined)
-    void run(file, 'image')
+    // replacing a saved entry's receipt keeps what the user already has
+    if (!existing) void run(file, 'image')
   }
 
   async function toggleMic() {
@@ -301,7 +329,7 @@ export function AddSheet() {
   }
 
   function save() {
-    if (!canSave || closing.current) return
+    if (!canSave || !changed || closing.current) return
     repo.save({
       id: existing?.id ?? uid(),
       type,
@@ -311,7 +339,8 @@ export function AddSheet() {
       note: note.trim() || undefined,
       merchant: merchant.trim() || undefined,
       createdAt: existing?.createdAt ?? Date.now(),
-    })
+      photoAt: existing?.photoAt,
+    }, photo === null && !existing?.photoAt ? undefined : photo)
     close()
   }
 
@@ -380,20 +409,36 @@ export function AddSheet() {
     </SubSheet>
   )
 
-  if (review) {
+  const photoSheet = sub === 'photo' && photoUrl && (
+    <SubSheet label="Receipt" onClose={() => setSub(undefined)}>
+      <img className="photo" src={photoUrl} alt="Receipt" />
+      <div className="row">
+        <button className="pill grow" onClick={() => fileRef.current?.click()}>Replace</button>
+        <button className="pill grow exp" onClick={() => { setPhoto(null); setSub(undefined) }}>Remove</button>
+      </div>
+    </SubSheet>
+  )
+  const fileInput = <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+
+  // Camera / Voice drafts and saved entries share the card layout
+  if (review || existing) {
     const c = cat ? category(cat) : undefined
     const dot = <span className="hint-mark" aria-label="Guessed" />
     return (
       <div className="sheet-wrap" onClick={close}>
-        <div className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} role="dialog" aria-modal="true" aria-label="Review entry"
+        <div className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} role="dialog" aria-modal="true" aria-label={existing ? 'Edit entry' : 'Review entry'}
           style={drag.style} onClick={(e) => e.stopPropagation()}>
           {header}
           {phase === 'busy' ? readingReceipt : (
             <>
-              <div className="review-source">
-                {source === 'image' ? 'From your receipt' : 'From your voice'}{merchant && ` · ${merchant}`}
-                {!!hints.size && <> · {dot} = our guess, tap to change</>}
-              </div>
+              {existing ? (
+                (merchant || photoUrl) && <div className="review-source">{[merchant, photoUrl && 'receipt attached'].filter(Boolean).join(' · ')}</div>
+              ) : (
+                <div className="review-source">
+                  {source === 'image' ? 'From your receipt' : 'From your voice'}{merchant && ` · ${merchant}`}
+                  {!!hints.size && <> · {dot} = our guess, tap to change</>}
+                </div>
+              )}
               {heard && <div className="heard">“{heard}”</div>}
               {warning}
               {editAmount ? (
@@ -422,13 +467,32 @@ export function AddSheet() {
                     </span>
                     {hints.has('note') && dot}
                   </label>
-                  <button className="review-save" disabled={!canSave} onClick={save}>Save entry</button>
+                  {(existing || capture?.kind === 'image') && (
+                    <button className="review-receipt" onClick={() => (photoUrl ? setSub('photo') : fileRef.current?.click())}>
+                      {photoUrl ? <img className="thumb" src={photoUrl} alt="" /> : <span className="add"><Camera size={22} /></span>}
+                      <span className="value"><small>Receipt</small><strong>{photoUrl ? 'View photo' : 'Add receipt photo'}</strong></span>
+                      {photoUrl && <ChevronRight size={16} className="chev" />}
+                    </button>
+                  )}
+                  {photoError && <div className="warn" role="alert"><TriangleAlert size={18} />{photoError}</div>}
+                  {existing ? (
+                    <div className="edit-bar">
+                      <button className={`round ${armDelete ? 'armed' : 'exp'}`} aria-label={armDelete ? 'Confirm delete' : 'Delete'} onClick={remove}>
+                        <Trash2 size={22} />
+                      </button>
+                      <button className="review-save" disabled={!canSave || !changed} onClick={save}>Save changes</button>
+                    </div>
+                  ) : (
+                    <button className="review-save" disabled={!canSave} onClick={save}>Save entry</button>
+                  )}
                 </>
               )}
             </>
           )}
+          {fileInput}
         </div>
         {catSheet}
+        {photoSheet}
       </div>
     )
   }
@@ -437,7 +501,7 @@ export function AddSheet() {
     <div className="sheet-wrap" onClick={close}>
       <div
         className={`glass sheet ${sub ? 'behind' : ''}`}
-        role="dialog" aria-modal="true" aria-label={existing ? 'Edit' : 'Add'}
+        role="dialog" aria-modal="true" aria-label="Add"
         style={drag.style}
         onClick={(e) => e.stopPropagation()}
       >
@@ -486,7 +550,8 @@ export function AddSheet() {
           </>
         )}
 
-        <div className={`bottom ${existing ? 'editing' : ''}`}>
+        {photoError && <div className="warn" role="alert"><TriangleAlert size={18} />{photoError}</div>}
+        <div className="bottom">
           <button className="round" aria-label={photo ? 'Receipt photo' : 'Add receipt photo'} disabled={working}
             onClick={() => (photo ? setSub('photo') : fileRef.current?.click())}>
             <Camera size={24} />{photo && <span className="dot" />}
@@ -495,26 +560,13 @@ export function AddSheet() {
             disabled={phase === 'busy'} onClick={() => void toggleMic()}>
             {phase === 'rec' || phase === 'requesting' ? <><Square size={14} fill="currentColor" />{phase === 'rec' ? 'Stop' : 'Cancel'}</> : <Mic size={24} />}
           </button>
-          {existing && (
-            <button className={`round ${armDelete ? 'armed' : 'exp'}`} aria-label={armDelete ? 'Confirm delete' : 'Delete'} onClick={remove}>
-              <Trash2 size={22} />
-            </button>
-          )}
           <button className="save" disabled={!canSave} onClick={save}>Save</button>
         </div>
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+        {fileInput}
       </div>
 
       {catSheet}
-      {sub === 'photo' && photoUrl && (
-        <SubSheet label="Receipt" onClose={() => setSub(undefined)}>
-          <img className="photo" src={photoUrl} alt="Receipt" />
-          <div className="row">
-            <button className="pill grow" onClick={() => fileRef.current?.click()}>Replace</button>
-            <button className="pill grow exp" onClick={() => { setPhoto(undefined); setSub(undefined) }}>Remove</button>
-          </div>
-        </SubSheet>
-      )}
+      {photoSheet}
     </div>
   )
 }
