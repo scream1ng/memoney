@@ -14,6 +14,15 @@ function upload(kind = 'image', mime = 'image/jpeg', bytes: string | Uint8Array<
   return { method: 'POST', body, headers: { origin } }
 }
 
+function spoken(text: string) {
+  const body = new FormData()
+  body.set('kind', 'audio')
+  body.set('text', text)
+  body.set('today', '2026-09-28')
+  body.set('currency', '฿')
+  return { method: 'POST', body, headers: { origin } }
+}
+
 function completion(value: unknown = expense) {
   return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }] })
 }
@@ -63,22 +72,27 @@ describe('camera and voice API', () => {
     expect(sent.text.format.strict).toBe(true)
   })
 
-  it.each([['audio/webm;codecs=opus', 'webm'], ['audio/mp4', 'mp4']])('transcribes %s before extracting an expense', async (mime, extension) => {
-    fetchMock.mockResolvedValueOnce(Response.json({ text: 'กาแฟ 145 บาท' })).mockResolvedValueOnce(completion())
+  it('extracts an expense from browser speech with one Luna call', async () => {
+    fetchMock.mockResolvedValueOnce(completion())
     const app = parseRoutes(async () => 'user', origin)
-    const response = await app.request('/', upload('audio', mime, 'audio'))
+    const response = await app.request('/', spoken('กาแฟ 145 บาท'))
     expect(response.status).toBe(200)
     expect((await response.json() as { heard?: string }).heard).toBe('กาแฟ 145 บาท')
     const [url, options] = fetchMock.mock.calls[0]
-    expect(url).toBe('https://api.openai.com/v1/audio/transcriptions')
-    expect(options.body.get('file').name).toBe(`recording.${extension}`)
-    expect(options.body.get('model')).toBe('gpt-4o-mini-transcribe')
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body).input[0].content).toEqual([{ type: 'input_text', text: 'กาแฟ 145 บาท' }])
+    expect(url).toBe('https://api.openai.com/v1/responses')
+    expect(JSON.parse(options.body).input[0].content).toEqual([{ type: 'input_text', text: 'กาแฟ 145 บาท' }])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it.each([['image', 'text/html'], ['audio', 'image/jpeg'], ['other', 'image/jpeg']])('rejects %s with %s', async (kind, mime) => {
+  it('rejects unsupported photo formats', async () => {
     const app = parseRoutes(async () => 'user', origin)
-    expect((await app.request('/', upload(kind, mime))).status).toBe(415)
+    expect((await app.request('/', upload('image', 'text/html'))).status).toBe(415)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects unknown request kinds', async () => {
+    const app = parseRoutes(async () => 'user', origin)
+    expect((await app.request('/', upload('other'))).status).toBe(400)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -111,10 +125,10 @@ describe('camera and voice API', () => {
   })
 
   it('does not invent an expense for empty speech', async () => {
-    fetchMock.mockResolvedValueOnce(Response.json({ text: ' ' }))
     const app = parseRoutes(async () => 'user', origin)
-    expect((await app.request('/', upload('audio', 'audio/webm'))).status).toBe(422)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect((await app.request('/', spoken(' '))).status).toBe(400)
+    expect((await app.request('/', upload('audio', 'audio/webm'))).status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('discards invalid model fields and unknown properties', async () => {
@@ -145,15 +159,14 @@ describe('camera and voice API', () => {
 })
 
 describe('usage attribution', () => {
-  it('retains transcription usage when the second voice call fails', async () => {
+  it('attributes a failed voice extraction to Luna only', async () => {
     const finish = vi.fn().mockResolvedValue(undefined)
     const record = vi.fn().mockResolvedValue(finish)
-    fetchMock.mockResolvedValueOnce(Response.json({ text: 'coffee 145', usage: { input_tokens: 20, output_tokens: 4 } }))
-      .mockResolvedValueOnce(Response.json({ error: 'failed' }, { status: 500 }))
+    fetchMock.mockResolvedValueOnce(Response.json({ error: 'failed' }, { status: 500 }))
     const app = parseRoutes(async () => 'member', origin, record)
-    expect((await app.request('/', upload('audio', 'audio/webm'))).status).toBe(502)
-    expect(record.mock.calls).toEqual([['member', 'audio', 'gpt-4o-mini-transcribe'], ['member', 'audio', 'gpt-6-luna']])
-    expect(finish.mock.calls).toEqual([[{ input_tokens: 20, output_tokens: 4 }, 'completed'], [undefined, 'failed']])
+    expect((await app.request('/', spoken('coffee 145'))).status).toBe(502)
+    expect(record.mock.calls).toEqual([['member', 'audio', 'gpt-6-luna']])
+    expect(finish.mock.calls).toEqual([[undefined, 'failed']])
   })
   it('records usage before validating an incomplete model result', async () => {
     const finish = vi.fn().mockResolvedValue(undefined)

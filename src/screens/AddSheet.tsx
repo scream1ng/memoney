@@ -9,12 +9,21 @@ import { currencyAtom, repo, useAtom, useTransactions } from '../lib/store'
 import type { TxType } from '../lib/types'
 
 type Field = 'type' | 'amount' | 'date' | 'cat' | 'note' | 'merchant'
-type Phase = 'idle' | 'requesting' | 'rec' | 'busy' | 'failed'
+type Phase = 'idle' | 'rec' | 'voice' | 'busy' | 'failed'
 
-const MAX_REC_MS = 30_000
-const SILENCE_MS = 1_000
-const NO_SPEECH_MS = 8_000
-const FLAT_WAVE = 'M 0 28 L 160 28'
+const MAX_LISTEN_MS = 30_000
+
+type BrowserRecognition = {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+  onend: (() => void) | null
+  onerror: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
 
 /** "1250.5" → "1,250.5"; keeps a trailing "." while typing */
 function group(input: string): string {
@@ -44,16 +53,17 @@ export function AddSheet() {
   const [extra, setExtra] = useState<string | undefined>(existing?.category)
   const [sub, setSub] = useState<'cats' | 'photo'>()
   const [phase, setPhase] = useState<Phase>('idle')
-  const [voicePath, setVoicePath] = useState(FLAT_WAVE)
+  const [spoken, setSpoken] = useState('')
   const [source, setSource] = useState<'audio' | 'image'>('image')
   const [heard, setHeard] = useState('')
   const [parseError, setParseError] = useState('')
   // kept in memory only until attachment storage is decided (issue #1)
   const [photo, setPhoto] = useState<Blob>()
   const fileRef = useRef<HTMLInputElement>(null)
-  const recRef = useRef<MediaRecorder | null>(null)
+  const recRef = useRef<BrowserRecognition | null>(null)
+  const voiceInputRef = useRef<HTMLTextAreaElement>(null)
+  const voiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const parseReq = useRef<AbortController | null>(null)
-  const micReq = useRef(0) // bumped to drop a getUserMedia that resolves after Stop
   const alive = useRef(true)
   const amountRef = useRef<HTMLDivElement>(null)
 
@@ -67,7 +77,7 @@ export function AddSheet() {
   }
   const drag = useDragClose(close)
   const amount = parseAmount(input)
-  const working = phase === 'requesting' || phase === 'rec' || phase === 'busy'
+  const working = phase === 'rec' || phase === 'voice' || phase === 'busy'
   const canSave = amount > 0 && !!cat && !working
   const unhint = (f: Field) => setHints((h) => (h.has(f) ? new Set([...h].filter((x) => x !== f)) : h))
 
@@ -89,9 +99,12 @@ export function AddSheet() {
     return () => {
       alive.current = false
       parseReq.current?.abort()
-      if (recRef.current?.state === 'recording') recRef.current.stop()
+      recRef.current?.abort()
+      if (voiceTimer.current) clearTimeout(voiceTimer.current)
     }
   }, [])
+
+  useEffect(() => { if (phase === 'voice') voiceInputRef.current?.focus() }, [phase])
 
   const shownAmount = input ? `${symbol}${group(input)}` : money(0, symbol)
   // shrink to fit one line: 46px down to 26px
@@ -151,7 +164,7 @@ export function AddSheet() {
     return found.has('amount') || found.has('cat') || found.has('date') || found.has('merchant')
   }
 
-  async function run(blob: Blob, kind: 'audio' | 'image') {
+  async function run(input: Blob | string, kind: 'audio' | 'image') {
     parseReq.current?.abort()
     const request = new AbortController()
     parseReq.current = request
@@ -159,12 +172,16 @@ export function AddSheet() {
     setSource(kind)
     setPhase('busy')
     try {
-      const guess = await parse(blob, kind, symbol, request.signal)
-      if (alive.current && !request.signal.aborted) setPhase(apply(guess) ? 'idle' : 'failed')
+      const guess = await parse(input, kind, symbol, request.signal)
+      if (alive.current && !request.signal.aborted) {
+        const applied = apply(guess)
+        if (!applied && kind === 'audio') setParseError('No transaction found. Correct the text and try again.')
+        setPhase(applied ? 'idle' : kind === 'audio' ? 'voice' : 'failed')
+      }
     } catch (err) {
       if (alive.current && !request.signal.aborted) {
         setParseError(err instanceof Error ? err.message : '')
-        setPhase('failed')
+        setPhase(kind === 'audio' ? 'voice' : 'failed')
       }
     }
   }
@@ -178,95 +195,51 @@ export function AddSheet() {
     void run(file, 'image')
   }
 
-  async function toggleMic() {
-    if (phase === 'requesting' || phase === 'rec') {
-      if (recRef.current?.state === 'recording') recRef.current.stop()
-      else { micReq.current++; setPhase('idle') } // still on the permission prompt: cancel
-      return
-    }
-    const id = ++micReq.current
+  function toggleMic() {
+    if (phase === 'rec') return recRef.current?.stop()
     setParseError('')
     setSource('audio')
-    setPhase('requesting')
+    setSpoken('')
+    setHeard('')
+    const browser = window as Window & {
+      SpeechRecognition?: new () => BrowserRecognition
+      webkitSpeechRecognition?: new () => BrowserRecognition
+    }
+    const SpeechRecognition = browser.SpeechRecognition ?? browser.webkitSpeechRecognition
+    if (!SpeechRecognition) return setPhase('voice')
+    const recognition = new SpeechRecognition()
+    recognition.lang = navigator.language || 'en-US'
+    recognition.continuous = false
+    recognition.interimResults = false
+    const done = () => {
+      if (voiceTimer.current) clearTimeout(voiceTimer.current)
+      voiceTimer.current = null
+      recRef.current = null
+    }
+    recognition.onresult = (event) => {
+      setSpoken(Array.from(event.results).map((result) => result[0]?.transcript ?? '').join(' ').trim())
+    }
+    recognition.onend = () => {
+      if (recRef.current !== recognition) return
+      done()
+      if (alive.current) setPhase('voice')
+    }
+    recognition.onerror = () => {
+      if (recRef.current !== recognition) return
+      done()
+      if (alive.current) {
+        setParseError('Use your keyboard microphone or type your entry.')
+        setPhase('voice')
+      }
+    }
+    recRef.current = recognition
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      if (!alive.current || id !== micReq.current) return stream.getTracks().forEach((t) => t.stop())
-      let rec: MediaRecorder
-      try { rec = new MediaRecorder(stream) } catch (err) {
-        stream.getTracks().forEach((t) => t.stop())
-        throw err
-      }
-      const chunks: Blob[] = []
-      const timer = setTimeout(() => rec.state === 'recording' && rec.stop(), MAX_REC_MS)
-      let meter: ReturnType<typeof setInterval> | undefined
-      let audio: AudioContext | undefined
-      let noSpeech = false
-      rec.ondataavailable = (e) => chunks.push(e.data)
-      rec.onstop = () => {
-        clearTimeout(timer)
-        clearInterval(meter)
-        void audio?.close()
-        stream.getTracks().forEach((t) => t.stop())
-        recRef.current = null
-        if (!alive.current) return
-        setVoicePath(FLAT_WAVE)
-        if (noSpeech) { setParseError('No speech heard. Try again.'); setPhase('failed') }
-        else void run(new Blob(chunks, { type: rec.mimeType }), 'audio')
-      }
-      recRef.current = rec
-      try { rec.start() } catch (err) {
-        clearTimeout(timer)
-        recRef.current = null
-        stream.getTracks().forEach((t) => t.stop())
-        throw err
-      }
+      recognition.start()
+      voiceTimer.current = setTimeout(() => recognition.stop(), MAX_LISTEN_MS)
       setPhase('rec')
-      try {
-        audio = new AudioContext()
-        const analyser = audio.createAnalyser()
-        analyser.fftSize = 2048
-        audio.createMediaStreamSource(stream).connect(analyser)
-        if (audio.state === 'suspended') void audio.resume().catch(() => {})
-        const samples = new Uint8Array(analyser.fftSize)
-        const started = performance.now()
-        let voiceMs = 0
-        let lastVoice = started
-        meter = setInterval(() => {
-          if (rec.state !== 'recording' || audio?.state !== 'running') return
-          analyser.getByteTimeDomainData(samples)
-          let sum = 0
-          for (const sample of samples) sum += ((sample - 128) / 128) ** 2
-          const level = Math.sqrt(sum / samples.length)
-          if (level < 0.012) setVoicePath(FLAT_WAVE)
-          else {
-            const points = ['M 0 28', 'L 20 28']
-            const step = Math.floor(samples.length / 30)
-            for (let i = 1; i < 30; i++) {
-              let peak = 0
-              for (let j = (i - 1) * step; j < i * step; j++) {
-                const sample = (samples[j] - 128) / 128
-                if (Math.abs(sample) > Math.abs(peak)) peak = sample
-              }
-              const taper = Math.min(1, i / 5, (30 - i) / 5)
-              points.push(`L ${20 + i * 4} ${28 - Math.round(Math.max(-24, Math.min(24, peak * 120)) * taper)}`)
-            }
-            points.push('L 140 28', 'L 160 28')
-            setVoicePath(points.join(' '))
-          }
-          const now = performance.now()
-          if (level > 0.018) {
-            voiceMs += 100
-            lastVoice = now
-          }
-          if (voiceMs >= 200 && now - lastVoice >= SILENCE_MS) rec.stop()
-          else if (voiceMs < 200 && now - started >= NO_SPEECH_MS) { noSpeech = true; rec.stop() }
-        }, 100)
-      } catch (err) {
-        console.error('[mic level]', err)
-      }
-    } catch (err) {
-      console.error('[mic]', err)
-      if (alive.current && id === micReq.current) setPhase('failed')
+    } catch {
+      done()
+      setPhase('voice')
     }
   }
 
@@ -345,11 +318,22 @@ export function AddSheet() {
           )}
         </div>
 
-        {phase === 'rec' || phase === 'requesting' ? (
+        {phase === 'rec' ? (
           <div className="ai-panel voice-panel" aria-live="polite">
-            <div className="voice-status"><span className="voice-dot" />{phase === 'requesting' ? 'Connecting microphone' : 'Listening'}</div>
-            <svg className="voice-wave" viewBox="0 0 160 56" aria-hidden="true"><path d={voicePath} /></svg>
-            <div><div className="lbl">{phase === 'requesting' ? 'Allow microphone access' : 'Speak naturally'}</div><div className="sub">{phase === 'requesting' ? 'Waiting for permission…' : 'Stops automatically when you finish'}</div></div>
+            <div className="voice-status"><span className="voice-dot" />Listening</div>
+            <div className="lbl">Speak naturally</div>
+            <div className="sub">Stops when you finish, or tap Stop.</div>
+          </div>
+        ) : phase === 'voice' ? (
+          <div className="ai-panel voice-input-panel">
+            <label className="lbl" htmlFor="voice-text">{spoken ? 'Review what you said' : 'Voice entry'}</label>
+            <textarea id="voice-text" ref={voiceInputRef} value={spoken} onChange={(e) => { setSpoken(e.target.value); setParseError('') }}
+              placeholder="Tap your keyboard mic to dictate, or type your entry" maxLength={8000} />
+            <div className="sub">{parseError || 'Correct the text before Luna reads it.'}</div>
+            <div className="voice-actions">
+              <button className="pill" onClick={() => { setPhase('idle'); setSpoken(''); setParseError('') }}>Cancel</button>
+              <button className="pill" disabled={!spoken.trim()} onClick={() => void run(spoken.trim(), 'audio')}>Read entry</button>
+            </div>
           </div>
         ) : phase === 'busy' ? (
           <div className="ai-panel" aria-live="polite">
@@ -380,9 +364,9 @@ export function AddSheet() {
             onClick={() => (photo ? setSub('photo') : fileRef.current?.click())}>
             <Camera size={24} />{photo && <span className="dot" />}
           </button>
-          <button className={`round ${phase === 'rec' || phase === 'requesting' ? 'voice-stop' : ''}`} aria-label={phase === 'rec' ? 'Stop recording' : phase === 'requesting' ? 'Cancel recording' : 'Voice entry'}
+          <button className={`round ${phase === 'rec' ? 'voice-stop' : ''}`} aria-label={phase === 'rec' ? 'Stop listening' : 'Voice entry'}
             disabled={phase === 'busy'} onClick={toggleMic}>
-            {phase === 'rec' || phase === 'requesting' ? <><Square size={14} fill="currentColor" />{phase === 'rec' ? 'Stop' : 'Cancel'}</> : <Mic size={24} />}
+            {phase === 'rec' ? <><Square size={14} fill="currentColor" />Stop</> : <Mic size={24} />}
           </button>
           {existing && (
             <button className={`round ${armDelete ? 'armed' : 'exp'}`} aria-label={armDelete ? 'Confirm delete' : 'Delete'} onClick={remove}>
