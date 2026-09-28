@@ -2,7 +2,7 @@ import {
   Briefcase, Car, Clapperboard, Ellipsis, Gift, HeartPulse, House, ShoppingBag, TrendingUp, Utensils, Zap,
   type LucideIcon,
 } from 'lucide-react'
-import type { TxType } from './types'
+import type { TxType } from './types.ts'
 
 export interface Category {
   id: string

@@ -1,5 +1,17 @@
 export type TxType = 'expense' | 'income'
 
+/** Fields read from a voice clip or receipt photo. The user confirms every guess. */
+export interface Guess {
+  type?: TxType
+  /** integer minor units (cents/satang) */
+  amount?: number
+  category?: string
+  date?: string
+  note?: string
+  merchant?: string
+  heard?: string
+}
+
 export interface Tx {
   id: string
   type: TxType

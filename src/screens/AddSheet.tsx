@@ -11,7 +11,6 @@ import type { TxType } from '../lib/types'
 type Field = 'type' | 'amount' | 'date' | 'cat' | 'note' | 'merchant'
 type Phase = 'idle' | 'rec' | 'busy' | 'failed'
 
-// placeholder cap until the recording limit is decided (issue #1)
 const MAX_REC_MS = 30_000
 
 /** "1250.5" → "1,250.5"; keeps a trailing "." while typing */
@@ -44,10 +43,12 @@ export function AddSheet() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [source, setSource] = useState<'audio' | 'image'>('image')
   const [heard, setHeard] = useState('')
+  const [parseError, setParseError] = useState('')
   // kept in memory only until attachment storage is decided (issue #1)
   const [photo, setPhoto] = useState<Blob>()
   const fileRef = useRef<HTMLInputElement>(null)
   const recRef = useRef<MediaRecorder | null>(null)
+  const parseReq = useRef<AbortController | null>(null)
   const micReq = useRef(0) // bumped to drop a getUserMedia that resolves after Stop
   const alive = useRef(true)
   const amountRef = useRef<HTMLDivElement>(null)
@@ -83,6 +84,7 @@ export function AddSheet() {
     alive.current = true
     return () => {
       alive.current = false
+      parseReq.current?.abort()
       if (recRef.current?.state === 'recording') recRef.current.stop()
     }
   }, [])
@@ -146,14 +148,20 @@ export function AddSheet() {
   }
 
   async function run(blob: Blob, kind: 'audio' | 'image') {
+    parseReq.current?.abort()
+    const request = new AbortController()
+    parseReq.current = request
+    setParseError('')
     setSource(kind)
     setPhase('busy')
     try {
-      const ok = apply(await parse(blob, kind))
-      if (alive.current) setPhase(ok ? 'idle' : 'failed')
+      const guess = await parse(blob, kind, symbol, request.signal)
+      if (alive.current && !request.signal.aborted) setPhase(apply(guess) ? 'idle' : 'failed')
     } catch (err) {
-      console.error('[parse]', err)
-      if (alive.current) setPhase('failed')
+      if (alive.current && !request.signal.aborted) {
+        setParseError(err instanceof Error ? err.message : '')
+        setPhase('failed')
+      }
     }
   }
 
@@ -173,12 +181,17 @@ export function AddSheet() {
       return
     }
     const id = ++micReq.current
+    setParseError('')
     setSource('audio')
     setPhase('rec')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       if (!alive.current || id !== micReq.current) return stream.getTracks().forEach((t) => t.stop())
-      const rec = new MediaRecorder(stream)
+      let rec: MediaRecorder
+      try { rec = new MediaRecorder(stream) } catch (err) {
+        stream.getTracks().forEach((t) => t.stop())
+        throw err
+      }
       const chunks: Blob[] = []
       const timer = setTimeout(() => rec.state === 'recording' && rec.stop(), MAX_REC_MS)
       rec.ondataavailable = (e) => chunks.push(e.data)
@@ -233,7 +246,7 @@ export function AddSheet() {
           <div className="row between">
             <label className={`chip ${date !== today() ? 'date-off' : ''} ${h('date')}`} aria-label="Date">
               <CalendarDays size={16} />{dayLabel(date)}
-              <input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); unhint('date') } }} />
+              <input type="date" aria-label="Date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); unhint('date') } }} />
             </label>
             <div className={hints.has('type') ? 'hint-seg' : undefined}><TypeToggle value={type} onChange={switchType} /></div>
           </div>
@@ -244,7 +257,7 @@ export function AddSheet() {
         </div>
 
         <div className="meta">
-          {merchant && <span className={`chip ${h('merchant')}`}><Store size={16} />{merchant}</span>}
+          {merchant && <span className={`chip ${h('merchant')}`} title={merchant}><Store size={16} /><span className="clip">{merchant}</span></span>}
           <button className={`chip ${note ? h('note') : 'ph'}`} aria-label="Note" aria-pressed={showNote} onClick={() => setShowNote((s) => !s)}>
             <PenLine size={16} /><span className="clip">{note || (cat ? category(cat).label : 'Note')}</span>
           </button>
@@ -254,6 +267,7 @@ export function AddSheet() {
           <input className="note-input" value={note} onChange={(e) => { setNote(e.target.value); unhint('note') }} aria-label="Note" autoFocus maxLength={80} />
         )}
         {heard && <div className="heard">“{heard}”</div>}
+        {!!hints.size && phase === 'idle' && <div className="review-hint">Review the highlighted details before saving.</div>}
 
         <div className="catrow" role="group" aria-label="Category">
           {shown.map((c) => (
@@ -274,20 +288,21 @@ export function AddSheet() {
           <div className="ai-panel" aria-live="polite">
             <div className="pulse"><Mic size={30} /></div>
             <div className="wave" aria-hidden>{Array.from({ length: 13 }, (_, i) => <i key={i} style={{ animationDelay: `${(i % 5) * -0.2}s` }} />)}</div>
-            <div><div className="lbl">Listening…</div><div className="sub">Tap ■ to finish</div></div>
+            <div><div className="lbl">Listening…</div><div className="sub">Tap stop when you’re done · up to 30 seconds</div></div>
           </div>
         ) : phase === 'busy' ? (
           <div className="ai-panel" aria-live="polite">
             {source === 'image' && photoUrl && <img className="thumb" src={photoUrl} alt="" />}
             <LoaderCircle size={36} className="spin accent" />
             <div className="lbl">{source === 'image' ? 'Reading receipt…' : 'Reading what you said…'}</div>
+            <div className="sub">You can review the details before saving.</div>
           </div>
         ) : (
           <>
             {phase === 'failed' && (
               <div className="warn" role="alert">
                 <TriangleAlert size={18} />
-                {source === 'image' ? 'Couldn’t read the receipt. Type the amount instead.' : 'Couldn’t understand that. Type it instead.'}
+                {parseError || (source === 'image' ? 'Couldn’t read the receipt. Type the amount instead.' : 'Couldn’t understand that. Type it instead.')}
               </div>
             )}
             <div className={`keys ${phase === 'failed' ? 'compact' : ''}`}>
@@ -299,7 +314,7 @@ export function AddSheet() {
           </>
         )}
 
-        <div className="bottom">
+        <div className={`bottom ${existing ? 'editing' : ''}`}>
           <button className="round" aria-label={photo ? 'Receipt photo' : 'Add receipt photo'} disabled={working}
             onClick={() => (photo ? setSub('photo') : fileRef.current?.click())}>
             <Camera size={24} />{photo && <span className="dot" />}

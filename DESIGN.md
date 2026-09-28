@@ -87,16 +87,16 @@ Cards have **no** shadow.
 |---|---|---|
 | Icon button (44px) | `.icon-btn` | `:active` scale .92 and fill-hi |
 | Round button (56px) | `.round` | `:active`; `:disabled` muted; `.rec`/`.armed` exp fill; `.dot` accent badge |
-| Primary pill | `.save` (136×56) | `:disabled` fill with muted text |
+| Primary pill | `.save` (136×56; full-width in narrow edit sheets) | `:disabled` fill with muted text |
 | FAB (60px) | `.glass.fab` | `:active` scale .94 |
 | Floating tab bar | `.dock .glass.tabs` (NavLink) | `.active` accent on fill |
-| Segmented | `.seg` / `TypeToggle` | `[aria-pressed=true]` card and raised; `.e` exp, `.i` inc, `.n` ink |
-| Chip (40px) | `.chip` | `.ph` muted, `.date-off` accent, `.hint` accent tint |
-| Category tile | `CatIcon` `.cat` (36px list, 52px picker) | `[aria-pressed]` accent ring; `.hint` label tint; `:active` scale |
+| Segmented (44px controls) | `.seg` / `TypeToggle` | `[aria-pressed=true]` card and raised; `.e` exp, `.i` inc, `.n` ink |
+| Chip (44px) | `.chip` | `.ph` muted, `.date-off` accent, `.hint` accent tint |
+| Category tile | `CatIcon` `.cat` (36px list, 52px picker; 44px quick picker below 350px) | `[aria-pressed]` accent ring; `.hint` label tint; `:active` scale |
 | Tx row | `TxList` `.tx` in grouped card | `:active` #e5e5ea; hairline from 64px |
 | Settings row | `.set .row` (48px min) + `.ico` | `.danger` exp text |
 | Sheet | `.sheet-wrap > .glass.sheet` | `.sub` stacked; `.behind`; drag down / tap outside to close |
-| Keypad | `.keys .key` (50px, 3 columns) | `.compact` 40px; `.del` muted; `:active` |
+| Keypad | `.keys .key` (50px, 3 columns) | `.compact` 44px; `.del` muted; `:active` |
 | Working / listening panel | `.ai-panel` (fixed 224px, replaces keypad) | `.pulse` + `.wave` for recording, `.thumb` + `.spin` for busy |
 | Inline error | `.warn` | exp tint with an icon |
 | Empty state | `.empty .big.bob` | — |

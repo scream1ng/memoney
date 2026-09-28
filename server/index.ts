@@ -6,6 +6,7 @@ import { getMigrations } from 'better-auth/db/migration'
 import { Hono } from 'hono'
 import pg from 'pg'
 import type { Tx } from '../src/lib/types.ts'
+import { parseRoutes } from './parse.ts'
 
 pg.types.setTypeParser(20, Number) // bigint → number
 pg.types.setTypeParser(1082, (v) => v) // date → 'YYYY-MM-DD'
@@ -50,6 +51,11 @@ type Vars = { Variables: { userId: string } }
 const app = new Hono<Vars>()
 
 app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
+
+app.route('/api/parse', parseRoutes(async (request) => {
+  const session = await auth.api.getSession({ headers: request.headers })
+  return session?.user.id
+}, new URL(baseURL).origin))
 
 app.use('/api/tx/*', async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers })

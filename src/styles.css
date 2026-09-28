@@ -29,7 +29,7 @@ body {
 }
 
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; touch-action: manipulation; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .num { font-variant-numeric: tabular-nums; font-weight: 600; }
 .exp { color: var(--exp); }
@@ -126,7 +126,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
 /* ---------- segmented ---------- */
 .seg { display: inline-grid; grid-auto-flow: column; padding: 3px; border-radius: 999px; background: var(--fill); }
-.seg button { width: 56px; height: 40px; border-radius: 999px; display: grid; place-items: center; color: var(--muted); transition: background 0.2s, color 0.2s; }
+.seg button { width: 56px; height: 44px; border-radius: 999px; display: grid; place-items: center; color: var(--muted); transition: background 0.2s, color 0.2s; }
 .seg button[aria-pressed='true'] { background: var(--card); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); }
 .seg button[aria-pressed='true'].e { color: var(--exp); }
 .seg button[aria-pressed='true'].i { color: var(--inc); }
@@ -171,10 +171,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .chip {
   position: relative;
   display: inline-flex; align-items: center; gap: 6px;
-  height: 40px; padding: 0 16px; border-radius: 999px; max-width: 100%;
+  height: 44px; padding: 0 16px; border-radius: 999px; max-width: 100%; min-width: 0;
   background: var(--fill); font-size: 14px; font-weight: 500;
 }
 .chip .clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip svg { flex: none; }
+.chip:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chip.ph { color: var(--muted); }
 .chip.date-off { color: var(--accent); }
 .chip.hint, .hint-seg .seg { background: color-mix(in srgb, var(--accent) 18%, transparent); }
@@ -184,11 +186,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   background: var(--card); color: var(--ink); padding: 0 14px;
   font: inherit; font-size: 16px; /* ≥16px: no iOS zoom */
 }
-.heard { text-align: center; font-size: 13px; color: var(--muted); margin-top: -4px; }
+.heard { text-align: center; font-size: 13px; color: var(--muted); margin-top: -4px; overflow-wrap: anywhere; max-height: 68px; overflow-y: auto; }
+.review-hint { text-align: center; font-size: 13px; color: var(--muted); }
 
-.catrow { display: flex; justify-content: space-between; padding: 2px 0; }
+.catrow { display: flex; justify-content: space-between; gap: 4px; padding: 2px 0; }
 .catrow button, .cats button { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
-.catrow button { width: 60px; }
+.catrow button { width: 60px; min-width: 0; }
+.catrow .lbl { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .catrow .cat, .cats .cat { width: 52px; height: 52px; border-radius: 16px; transition: transform 0.15s; }
 .catrow .cat svg, .cats .cat svg { width: 24px; height: 24px; }
 .catrow .more { background: var(--fill); color: var(--ink); }
@@ -206,7 +210,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   transition: background 0.1s, transform 0.1s;
   user-select: none; -webkit-user-select: none;
 }
-.keys.compact .key { height: 40px; }
+.keys.compact .key { height: 44px; }
 .key:active { background: #e5e5ea; transform: scale(0.96); }
 .key.del { color: var(--muted); }
 
@@ -232,21 +236,21 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 .warn svg { flex: none; }
 
-.bottom { display: flex; align-items: center; gap: 10px; }
+.bottom { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .round {
   position: relative; width: 56px; height: 56px; border-radius: 50%; flex: none;
   display: grid; place-items: center; background: var(--card); color: var(--accent);
   transition: transform 0.15s;
 }
 .round:active { transform: scale(0.92); }
-.round:disabled { color: var(--muted); }
+.round:disabled { color: var(--muted); cursor: default; }
 .round.rec, .round.armed { background: var(--exp); color: #fff; }
 .round .dot { position: absolute; top: 6px; right: 6px; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card); }
 .save {
-  margin-left: auto; width: 136px; height: 56px; border-radius: 999px; flex: none;
+  margin-left: auto; width: 136px; min-width: 88px; height: 56px; border-radius: 999px; flex: 0 1 136px;
   font-size: 17px; font-weight: 600; background: var(--accent); color: var(--accent-ink);
 }
-.save:disabled { background: var(--fill); color: var(--muted); }
+.save:disabled { background: var(--fill); color: var(--muted); cursor: default; }
 
 .photo { width: 100%; max-height: 55dvh; object-fit: contain; border-radius: 16px; background: var(--card); }
 .pill { height: 50px; border-radius: 16px; background: var(--card); font-weight: 600; color: var(--accent); }
@@ -283,8 +287,16 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .set .danger { color: var(--exp); font-weight: 500; }
 .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; }
 .cur { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 0; }
-.cur button { min-width: 44px; height: 40px; padding: 0 12px; border-radius: 10px; background: var(--fill); font-weight: 600; }
+.cur button { min-width: 44px; height: 44px; padding: 0 12px; border-radius: 10px; background: var(--fill); font-weight: 600; }
 .cur button[aria-pressed='true'] { background: var(--accent); color: var(--accent-ink); }
+
+@media (max-width: 380px) {
+  .bottom.editing .save { flex-basis: 100%; }
+}
+
+@media (max-width: 350px) {
+  .catrow .cat { width: 44px; height: 44px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before { animation: none !important; transition: none !important; }
