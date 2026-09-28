@@ -96,7 +96,7 @@ Cards have **no** shadow.
 | Settings row | `.set .row` (48px min) + `.ico` | `.danger` exp text |
 | Sheet | `.sheet-wrap > .glass.sheet` | `.sub` stacked; `.behind`; drag down / tap outside to close |
 | Keypad | `.keys .key` (50px, 3 columns) | `.compact` 44px; `.del` muted; `:active` |
-| Working / listening panel | `.ai-panel` (fixed 224px, replaces keypad) | Browser speech text can be corrected before processing; `.thumb` + `.spin` for busy |
+| Working / listening panel | `.ai-panel` (fixed 224px, replaces keypad) | `.voice-wave` responds to microphone level while recording; `.thumb` + `.spin` for busy |
 | Inline error | `.warn` | exp tint with an icon |
 | Empty state | `.empty .big.bob` | — |
 | Sign-in button | `.signin button` (52px) | `.primary` ink fill |

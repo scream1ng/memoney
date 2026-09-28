@@ -2,10 +2,10 @@ import { today } from './format'
 import type { Guess } from './types'
 export type { Guess } from './types'
 
-export async function parse(input: Blob | string, kind: 'audio' | 'image', currency: string, signal?: AbortSignal): Promise<Guess> {
+export async function parse(blob: Blob, kind: 'audio' | 'image', currency: string, signal?: AbortSignal): Promise<Guess> {
+  if (kind === 'image') blob = await compressPhoto(blob)
   const body = new FormData()
-  if (kind === 'image') body.append('file', await compressPhoto(input as Blob))
-  else body.append('text', input as string)
+  body.append('file', blob)
   body.append('kind', kind)
   body.append('today', today())
   body.append('currency', currency)
