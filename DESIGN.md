@@ -25,8 +25,7 @@ All styles live in `src/styles.css`, with shared components in `src/components/u
 
 Tints are `color-mix(in srgb, var(--x) N%, transparent)`:
 - hint background is accent at 14–18%;
-- warn background is exp at 10%;
-- the recording pulse ring is exp at 16% and 8%.
+- warn background is exp at 10%.
 
 Each category has its own color (`src/lib/categories.ts`, iOS system colors). These are only used as the fill of an icon tile or a bar, never as text.
 
@@ -86,7 +85,7 @@ Cards have **no** shadow.
 | Component | Class / file | States |
 |---|---|---|
 | Icon button (44px) | `.icon-btn` | `:active` scale .92 and fill-hi |
-| Round button (56px) | `.round` | `:active`; `:disabled` muted; `.rec`/`.armed` exp fill; `.dot` accent badge |
+| Round button (56px) | `.round` | `:active`; `:disabled` muted; `.armed` exp fill; `.dot` accent badge; `.voice-stop` ink pill |
 | Primary pill | `.save` (136×56; full-width in narrow edit sheets) | `:disabled` fill with muted text |
 | FAB (60px) | `.glass.fab` | `:active` scale .94 |
 | Floating tab bar | `.dock .glass.tabs` (NavLink) | `.active` accent on fill |
@@ -97,7 +96,7 @@ Cards have **no** shadow.
 | Settings row | `.set .row` (48px min) + `.ico` | `.danger` exp text |
 | Sheet | `.sheet-wrap > .glass.sheet` | `.sub` stacked; `.behind`; drag down / tap outside to close |
 | Keypad | `.keys .key` (50px, 3 columns) | `.compact` 44px; `.del` muted; `:active` |
-| Working / listening panel | `.ai-panel` (fixed 224px, replaces keypad) | `.pulse` + `.wave` for recording, `.thumb` + `.spin` for busy |
+| Working / listening panel | `.ai-panel` (fixed 224px, replaces keypad) | `.voice-wave` responds to microphone level while recording; `.thumb` + `.spin` for busy |
 | Inline error | `.warn` | exp tint with an icon |
 | Empty state | `.empty .big.bob` | — |
 | Sign-in button | `.signin button` (52px) | `.primary` ink fill |
