@@ -129,4 +129,4 @@ export function useAtom<T>(a: Atom<T>): [T, (v: T) => void] {
 }
 
 export const monthAtom = atom('pocket.month', monthKey(today()), false)
-export const currencyAtom = atom('pocket.currency', '')
+export const currencyAtom = atom('pocket.currency', '$')

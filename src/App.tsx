@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation, type Location } from 
 import { isAdmin } from './lib/access'
 import { Usage } from './screens/Usage'
 import { Dock } from './components/ui'
+import { PasskeyPrompt } from './components/PasskeyPrompt'
 import { authClient } from './lib/auth'
 import { repo } from './lib/store'
 import { AddSheet } from './screens/AddSheet'
@@ -35,6 +36,7 @@ function Shell() {
         </Routes>
       )}
       <Dock admin={admin} />
+      {data?.user && <PasskeyPrompt key={data.user.id} userId={data.user.id} />}
     </>
   )
 }
