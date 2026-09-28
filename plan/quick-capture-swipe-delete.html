@@ -1,0 +1,255 @@
+<!doctype html>
+<!--
+MeMoney prototype: Home quick capture, swipe delete, and capture review (2026-09-28)
+Scope: visual proposal only. No application, API, or database changes.
+
+Decisions
+- Keep the current month, balance, grouped transaction rows, bottom tabs, and Add sheet visual language.
+- Tap the Home + button to reveal three 56px choices, top to bottom: Manual, Camera, Voice.
+- Manual opens the existing blank Add sheet. Camera opens the device camera/photo chooser; Voice opens a full-screen listening view.
+- Voice view: calm white screen, breathing blue orb that grows with your voice level, status, then a short hint under it.
+  Words are not shown live (browser speech was dropped for iPhone); what was heard appears on the review sheet.
+  Bottom: solid blue check = finish now, light blue × = cancel. All buttons are blue, none black. Auto-stop still ends it.
+  After stop, the same view shows Reading (orb spins faster, check locked) until the review sheet opens.
+- Camera and Voice parse into one compact review sheet. It shows the guessed amount, category, and note, with date at top left and expense/income at top right. Save stays a deliberate final action.
+- The review sheet says where the draft came from and that blue dots mark guesses. Amount stays black like the list.
+- Tapping the amount opens an in-sheet keypad (digits, dot, backspace) right under the fields, with one Done button. Tapping category opens the category picker. Guessed values carry a blue cue until edited.
+- The review sheet has no keypad or capture buttons by default. Manual entry still uses the existing Add sheet.
+- Swipe a transaction left to reveal Delete. Tap Delete to remove it and show Undo; a row tap still opens Edit.
+- Never delete merely because a swipe passed a distance threshold. Only one row can stay revealed.
+- Existing edit-sheet delete remains available. No new transaction fields or attachment-storage decision.
+- On capture error, keep the Add sheet editable and show its existing inline warning.
+
+Open for implementation: decide exact Undo duration; the prototype depicts five seconds.
+The HTML mirrors the DOM structure of Home, TxList, Dock, and AddSheet from src/ and links their real stylesheet.
+Those components are TSX, so their React render functions cannot run verbatim in a file:// mockup.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeMoney — quick capture and swipe delete</title>
+<link rel="stylesheet" href="../src/styles.css">
+<style>
+  html { height: auto !important; overflow-y: auto !important; position: static !important; overscroll-behavior: auto !important; }
+  body { height: auto !important; overflow: visible !important; position: static !important; overscroll-behavior: auto !important; }
+  body { padding: 24px 16px 48px; background: #e5e5ea; }
+  .proto-title { max-width: 1100px; margin: 0 auto 20px; font-size: 22px; font-weight: 700; }
+  .frames { max-width: 1200px; margin: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 28px 22px; }
+  .frame h2 { margin: 0 0 10px 5px; color: #3a3a3c; font-size: 14px; font-weight: 600; }
+  .phone { width: 380px; max-width: 100%; height: 760px; position: relative; overflow: hidden; border-radius: 42px; background: var(--bg); box-shadow: 0 0 0 9px #1c1c1e; }
+  .phone .screen { min-height: 100%; padding-top: 52px; }
+  .phone .dock { position: absolute; }
+  .phone .sheet-wrap { position: absolute; animation: none; }
+  .phone .sheet { max-height: 740px; overflow: hidden; animation: none; }
+  .phone .tx { display: flex; }
+  .icon { width: 20px; height: 20px; display: block; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .icon.small { width: 16px; height: 16px; }
+  .icon.large { width: 24px; height: 24px; }
+  .fab .icon { width: 28px; height: 28px; stroke-width: 2.4; }
+  .cat .icon { width: 20px; height: 20px; }
+  .catrow .cat .icon { width: 24px; height: 24px; }
+  .swipe-slot { position: relative; overflow: hidden; background: var(--card); }
+  .swipe-slot.revealed { background: var(--exp); }
+  .swipe-slot:first-of-type { border-radius: 16px 16px 0 0; }
+  .swipe-slot:last-of-type { border-radius: 0 0 16px 16px; }
+  .swipe-slot .tx { z-index: 1; }
+  .swipe-slot .tx::before { display: none; }
+  .swipe-slot + .swipe-slot .tx::before { display: block; }
+  .swipe-slot.revealed .tx { transform: translateX(-86px); border-radius: 0; box-shadow: 1px 0 0 var(--sep); }
+  .swipe-delete { position: absolute; inset: 0 0 0 auto; width: 86px; display: grid; place-items: center; color: #fff; font-size: 14px; font-weight: 600; }
+  .swipe-delete .icon { margin: 0 auto 3px; }
+  .quick-actions { position: absolute; right: 16px; bottom: 92px; z-index: 22; display: grid; gap: 10px; }
+  .quick-actions .action { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-height: 56px; }
+  .action-label { padding: 8px 12px; border-radius: 10px; background: var(--card); font-size: 14px; font-weight: 600; }
+  .quick-actions .round { box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+  .quick-actions .round .icon { width: 24px; height: 24px; }
+  .menu-shade { position: absolute; inset: 0; background: rgba(0,0,0,.15); z-index: 21; }
+  .menu-open .fab .icon { transform: rotate(45deg); }
+  .undo { position: absolute; left: 16px; right: 16px; bottom: 90px; z-index: 21; min-height: 52px; padding: 0 16px; border-radius: 16px; background: #1c1c1e; color: #fff; display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+  .undo strong { color: #80b8ff; }
+  .review-sheet { min-height: 500px; gap: 12px; padding-bottom: 20px; }
+  .review-top { display: flex; align-items: center; justify-content: space-between; }
+  .review-top .chip { flex: none; }
+  .picker-head { font-size: 17px; font-weight: 600; text-align: center; }
+  .review-amount { width: 100%; min-height: 128px; padding: 14px; border-radius: 16px; background: var(--card); text-align: center; display: grid; place-content: center; gap: 2px; }
+  .review-amount small, .review-category small { color: var(--muted); font-size: 13px; font-weight: 400; }
+  .review-amount strong { color: var(--ink); font-size: 42px; line-height: 1.1; letter-spacing: -1px; }
+  .review-amount .edit-cue { color: var(--accent); font-size: 13px; font-weight: 600; }
+  .review-category { width: 100%; min-height: 72px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; background: var(--card); text-align: left; border-radius: 16px; }
+  .review-category .cat { width: 44px; height: 44px; border-radius: 14px; }
+  .review-category .cat .icon { width: 24px; height: 24px; }
+  .review-category .value { display: grid; gap: 2px; flex: 1; }
+  .review-category strong { font-size: 16px; font-weight: 600; }
+  .review-category > .icon { color: var(--muted); width: 16px; height: 16px; }
+  .review-note { min-height: 62px; padding: 10px 14px; border-radius: 16px; background: var(--card); display: flex; align-items: center; gap: 12px; }
+  .review-note .value { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .review-note small { color: var(--muted); font-size: 13px; }
+  .review-note input { min-width: 0; width: 100%; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; outline: none; }
+  .review-note:focus-within { outline: 2px solid var(--accent); }
+  .review-save { width: 100%; height: 56px; margin-top: auto; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 17px; font-weight: 600; }
+  .review-source { display: flex; align-items: center; gap: 6px; margin: -2px 4px 0; color: var(--muted); font-size: 13px; }
+  .review-sheet .review-source .hint-mark { margin: 0; }
+  .review-sheet .hint-mark { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: auto; }
+  .edit-review { min-height: 500px; }
+  .edit-review .review-amount { min-height: 112px; outline: 2px solid var(--accent); }
+  .edit-review .review-amount strong { color: var(--ink); }
+  .edit-review .review-amount strong::after { content: ''; display: inline-block; width: 3px; height: 38px; margin-left: 3px; vertical-align: -4px; border-radius: 2px; background: var(--accent); animation: caret 1s steps(1) infinite; }
+  @keyframes caret { 50% { opacity: 0; } }
+  .keypad { margin-top: 4px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .keypad button { height: 54px; border-radius: 14px; background: var(--card); font-size: 24px; display: grid; place-items: center; }
+  .keypad button:active { background: var(--fill-hi); }
+  .keypad .icon { width: 26px; height: 26px; stroke-width: 1.8; }
+  .category-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 4px; margin: 8px 0; }
+  .category-pick button { display: grid; justify-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+  .category-pick .cat { width: 52px; height: 52px; border-radius: 16px; }
+  .category-pick .cat .icon { width: 24px; height: 24px; }
+  .category-pick button[aria-pressed="true"] .cat { box-shadow: 0 0 0 2.5px var(--bg), 0 0 0 5px var(--accent); }
+  .category-review { min-height: 360px; }
+  .voice-mode { position: absolute; inset: 0; z-index: 30; background: var(--card); display: flex; flex-direction: column; align-items: center; padding: 64px 20px 28px; }
+  .voice-title { font-size: 15px; font-weight: 600; color: var(--muted); }
+  .voice-center { flex: 1; display: grid; place-content: center; justify-items: center; gap: 22px; }
+  .orb { width: 220px; height: 220px; border-radius: 50%; position: relative; overflow: hidden; background: linear-gradient(180deg, #dbe6f5, #eef2f8); animation: breathe 2.6s ease-in-out infinite; }
+  .orb::before { content: ''; position: absolute; inset: -35%; background: radial-gradient(42% 26% at 50% 18%, #2f6fd6, transparent 70%), radial-gradient(30% 22% at 78% 38%, #7faaf0, transparent 70%), radial-gradient(34% 30% at 26% 62%, #fff, transparent 70%), radial-gradient(30% 24% at 64% 78%, #c9dcf7, transparent 70%); filter: blur(12px); animation: drift 9s linear infinite; }
+  @keyframes breathe { 50% { transform: scale(1.05); } }
+  @keyframes drift { to { transform: rotate(360deg); } }
+  .voice-mode.reading .orb::before { animation-duration: 2.5s; }
+  .voice-mode.reading .voice-status { color: var(--accent); }
+  .voice-mode.reading .voice-round:not(.close) { opacity: .35; }
+  .voice-status { display: flex; align-items: center; gap: 7px; color: var(--exp); font-size: 15px; font-weight: 600; }
+  .voice-center { gap: 18px; }
+  .orb { width: 176px; height: 176px; }
+  .voice-text { min-height: 96px; max-width: 300px; text-align: center; font-size: 26px; font-weight: 600; line-height: 1.25; letter-spacing: -.3px; }
+  .voice-text.hint { color: var(--muted); font-weight: 500; font-size: 22px; }
+  .voice-text .tail { color: var(--muted); }
+  .voice-bar { display: flex; justify-content: center; gap: 28px; }
+  .voice-round { width: 64px; height: 64px; flex: none; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--sep); background: var(--card); box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+  .voice-round .icon { width: 24px; height: 24px; }
+  .voice-round.close { border: 0; background: color-mix(in srgb, var(--accent) 14%, var(--card)); color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .orb, .orb::before, .edit-review .review-amount strong::after { animation: none; } }
+  .review-variants { display: flex; gap: 8px; margin: -2px 0 10px 5px; }
+  .review-variants button { min-height: 36px; padding: 0 14px; border-radius: 999px; background: var(--card); color: var(--muted); font-size: 13px; font-weight: 600; }
+  .review-variants button.selected { background: var(--accent); color: var(--accent-ink); }
+  .flow { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px; border-radius: 16px; background: var(--card); font-size: 13px; }
+  .flow span { padding: 10px 12px; background: var(--fill); border-radius: 12px; }
+  .flow b { color: var(--muted); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="pie" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9v9zM12 3a9 9 0 0 1 9 9h-9z"/></symbol>
+  <symbol id="settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l-1.9 1.9A1.7 1.7 0 0 0 16 18.4a1.7 1.7 0 0 0-1 1.5V21h-3v-1.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-1.9-1.9a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H5v-3h1.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l1.9-1.9a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V5h3v1.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l1.9 1.9a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21v3h-1.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="camera" viewBox="0 0 24 24"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="m16 4 4 4-11 11-5 1 1-5zM14 6l4 4"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/></symbol>
+  <symbol id="calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></symbol>
+  <symbol id="store" viewBox="0 0 24 24"><path d="M3 9h18l-2-5H5zM5 9v12h14V9M9 21v-7h6v7"/></symbol>
+  <symbol id="food" viewBox="0 0 24 24"><path d="M4 3v7a3 3 0 0 0 6 0V3M7 3v18M17 3c-2 2-3 5-3 9h5V3M19 12v9"/></symbol>
+  <symbol id="car" viewBox="0 0 24 24"><path d="m5 16-1 3h2l1-2h10l1 2h2l-1-3M4 16V9l2-4h12l2 4v7zM4 10h16M7 14h.01M17 14h.01"/></symbol>
+  <symbol id="shop" viewBox="0 0 24 24"><path d="M4 8h16l-1 13H5zM9 9V6a3 3 0 0 1 6 0v3"/></symbol>
+  <symbol id="zap" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-12h-7z"/></symbol>
+  <symbol id="health" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/><path d="M3 12h5l2-3 3 6 2-3h6"/></symbol>
+  <symbol id="fun" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M3 7l2-4h16l-2 4M8 3l3 4M15 3l3 4M10 12l5 2.5-5 2.5z"/></symbol>
+  <symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="backspace" viewBox="0 0 24 24"><path d="M9 4H21v16H9L2 12zM12 9l6 6M18 9l-6 6"/></symbol>
+</svg>
+<h1 class="proto-title">MeMoney · faster entry</h1>
+<div class="frames" id="frames"></div>
+<script>
+  const icon = (name, cls = '') => `<svg class="icon ${cls}" aria-hidden="true"><use href="#${name}"></use></svg>`
+  const txs = [
+    {id:'1',type:'expense',amount:'−฿320.00',category:'food',color:'#c93400',merchant:'Noodle House',note:'Lunch with Mai',date:'Today'},
+    {id:'2',type:'expense',amount:'−฿89.00',category:'car',color:'#007aff',merchant:'Metro',note:'',date:'Today'},
+    {id:'3',type:'expense',amount:'−฿1,240.00',category:'shop',color:'#ff2d55',merchant:'Market',note:'Groceries',date:'Yesterday'},
+    {id:'4',type:'expense',amount:'−฿610.00',category:'zap',color:'#af52de',merchant:'Electricity',note:'',date:'Yesterday'},
+  ]
+  // Static DOM equivalents of Home / TxList / Dock. Data has the same fields as Tx.
+  function txRow(t, revealed = false) {
+    return `<div class="swipe-slot ${revealed ? 'revealed' : ''}"><button class="swipe-delete" aria-label="Delete ${t.merchant}">${icon('trash')}Delete</button><button class="row tx"><span class="cat" style="background:${t.color}">${icon(t.category)}</span><div class="grow"><div>${t.merchant}</div>${t.note ? `<div class="sub">${t.note}</div>` : ''}</div><span class="num exp">${t.amount}</span></button></div>`
+  }
+  function dock(expanded = false) {
+    return `<nav class="dock"><div class="glass tabs"><a class="active" aria-label="Home">${icon('home')}</a><a aria-label="Stats">${icon('pie')}</a><a aria-label="Settings">${icon('settings')}</a></div><button class="glass fab" aria-label="${expanded ? 'Close add menu' : 'Add'}">${icon('plus')}</button></nav>`
+  }
+  function home({swipe = false, menu = false, undo = false} = {}) {
+    return `<main class="screen"><div class="row between month"><h1>September 2026</h1><div class="row"><button class="icon-btn" aria-label="Previous month">${icon('chevron-left')}</button><button class="icon-btn" aria-label="Next month">${icon('chevron-right')}</button></div></div><section class="summary"><div class="num balance">${undo ? '฿12,901.00' : '฿12,581.00'}</div><div class="io"><span class="num inc">+฿18,000.00</span><span class="num exp">${undo ? '−฿5,099.00' : '−฿5,419.00'}</span></div></section><div class="seg filter" role="group"><button class="n" aria-pressed="true" aria-label="All">${icon('list')}</button><button class="e" aria-label="Expense">${icon('minus')}</button><button class="i" aria-label="Income">${icon('plus')}</button></div><div class="card list"><section><div class="day">Today</div>${undo ? '' : txRow(txs[0],swipe)}${txRow(txs[1])}</section><section><div class="day">Yesterday</div>${txRow(txs[2])}${txRow(txs[3])}</section></div></main>${menu ? `<div class="menu-shade"></div><div class="quick-actions"><div class="action"><span class="action-label">Manual</span><button class="round" aria-label="Manual entry">${icon('pen')}</button></div><div class="action"><span class="action-label">Camera</span><button class="round" aria-label="Scan receipt">${icon('camera')}</button></div><div class="action"><span class="action-label">Voice</span><button class="round" aria-label="Voice entry">${icon('mic')}</button></div></div>` : ''}${undo ? `<div class="undo"><span>Transaction deleted</span><strong>Undo</strong></div>` : ''}${dock(menu)}`
+  }
+  const categories = [
+    {id:'food', label:'Food', icon:'food', color:'#c93400'},
+    {id:'transport', label:'Transport', icon:'car', color:'#007aff'},
+    {id:'shopping', label:'Shopping', icon:'shop', color:'#ff2d55'},
+    {id:'bills', label:'Bills', icon:'zap', color:'#af52de'},
+    {id:'home', label:'Home', icon:'home', color:'#0071a4'},
+    {id:'health', label:'Health', icon:'health', color:'#ff3b30'},
+    {id:'fun', label:'Fun', icon:'fun', color:'#5856d6'},
+    {id:'other', label:'Other', icon:'more', color:'#8e8e93'},
+  ]
+  const selectedCategory = {camera:'shopping', voice:'food'}
+  function categoryChoices(kind) {
+    return `<div class="category-pick">${categories.map(c => `<button data-category="${c.id}" aria-pressed="${selectedCategory[kind] === c.id}"><span class="cat" style="background:${c.color}">${icon(c.icon)}</span>${c.label}</button>`).join('')}</div>`
+  }
+  function voiceCapture(state = 'listening') {
+    const status = state === 'reading' ? 'Reading what you said…' : `<span class="voice-dot"></span>Listening`
+    const text = state === 'start'
+      ? `<p class="voice-text hint">Say the amount and what it was for</p>`
+      : state === 'listening' ? `<p class="voice-text">Coffee 80 <span class="tail">baht</span></p>` : `<p class="voice-text">Coffee 80 baht</p>`
+    return `<div class="voice-mode ${state}" role="dialog" aria-modal="true" aria-label="Voice entry"><div class="voice-title">Voice entry</div><div class="voice-center"><div class="orb" aria-hidden="true"></div><div class="voice-status">${status}</div><div aria-live="polite">${text}</div></div><div class="voice-bar"><button class="voice-round" aria-label="Finish recording"${state === 'reading' ? ' disabled' : ''}>${icon('check')}</button><button class="voice-round close" aria-label="Cancel voice entry">${icon('x')}</button></div></div>`
+  }
+  function reviewSheet(kind, mode = 'review') {
+    const amount = kind === 'voice' ? '฿80.00' : '฿1,240.00'
+    const note = kind === 'voice' ? 'Coffee' : 'Groceries'
+    const cat = categories.find(c => c.id === selectedCategory[kind])
+    const handle = `<div class="handle"><div class="grab"></div></div>`
+    const top = `<div class="review-top"><label class="chip hint">${icon('calendar','small')}Today<input type="date" aria-label="Date" value="2026-09-28"></label><div class="seg" role="group"><button class="e" aria-label="Expense" aria-pressed="true">${icon('minus')}</button><button class="i" aria-label="Income" aria-pressed="false">${icon('plus')}</button></div></div>`
+    if (mode === 'category') return `<div class="sheet-wrap"><div class="glass sheet review-sheet category-review" role="dialog" aria-modal="true" aria-label="Choose category">${handle}<div class="picker-head">Choose category</div>${categoryChoices(kind)}<button class="review-save" data-review-action="review">Done</button></div></div>`
+    const amountCard = mode === 'amount'
+      ? `<div class="review-amount"><small>Amount</small><strong>${amount}</strong></div>`
+      : `<button class="review-amount" data-review-action="amount"><small>Amount</small><strong>${amount}</strong><span class="edit-cue">Tap to edit</span></button>`
+    const categoryRow = `<button class="review-category" data-review-action="category"><span class="cat" style="background:${cat.color}">${icon(cat.icon)}</span><span class="value"><small>Category</small><strong>${cat.label}</strong></span><span class="hint-mark"></span>${icon('chevron-right')}</button>`
+    const noteRow = `<label class="review-note"><span class="value"><small>Note</small><input aria-label="Note" value="${note}" maxlength="80"></span><span class="hint-mark"></span></label>`
+    if (mode === 'amount') return `<div class="sheet-wrap"><div class="glass sheet review-sheet edit-review" role="dialog" aria-modal="true" aria-label="Edit amount">${handle}${top}${amountCard}${categoryRow}<div class="keypad">${['1','2','3','4','5','6','7','8','9','.','0'].map(k => `<button>${k}</button>`).join('')}<button aria-label="Delete digit">${icon('backspace')}</button></div><button class="review-save" data-review-action="review">Done</button></div></div>`
+    const source = `<div class="review-source">${kind === 'voice' ? 'From your voice' : 'From your receipt'} · <span class="hint-mark"></span> = our guess, tap to change</div>`
+    return `<div class="sheet-wrap"><div class="glass sheet review-sheet" role="dialog" aria-modal="true" aria-label="Review entry">${handle}${top}${source}${amountCard}${categoryRow}${noteRow}<button class="review-save">Save entry</button></div></div>`
+  }
+  const frame = (title, content, extra = '') => `<section class="frame"><h2>${title}</h2><div class="phone ${extra}">${content}</div></section>`
+  document.querySelector('#frames').innerHTML = [
+    frame('1 · Home',home()),
+    frame('2 · Swipe left → tap Delete',home({swipe:true})),
+    frame('3 · Deleted → Undo',home({undo:true})),
+    frame('4 · Tap + → choose entry method',home({menu:true}),'menu-open'),
+    `<section class="frame"><h2>5 · Voice capture</h2><div class="review-variants"><button data-voice="start" aria-pressed="false">Start</button><button class="selected" data-voice="listening" aria-pressed="true">Listening</button><button data-voice="reading" aria-pressed="false">Reading</button></div><div class="phone" id="voice-phone">${home()+voiceCapture()}</div></section>`,
+    `<section class="frame"><h2>6 · Camera or Voice → review</h2><div class="review-variants"><button class="selected" data-review="camera" aria-pressed="true">Receipt draft</button><button data-review="voice" aria-pressed="false">Voice draft</button></div><div class="phone" id="review-phone">${home()+reviewSheet('camera')}</div></section>`,
+    `<div class="flow"><span>Camera or Voice</span><b>→</b><span>Read details</span><b>→</b><span>Review amount + category + note</span><b>→</b><span>Tap to edit if needed</span><b>→</b><span>Save</span></div>`,
+  ].join('')
+  document.querySelectorAll('[data-voice]').forEach((button) => button.addEventListener('click', () => {
+    document.querySelectorAll('[data-voice]').forEach((b) => { b.setAttribute('aria-pressed', String(b === button)); b.classList.toggle('selected', b === button) })
+    document.querySelector('#voice-phone').innerHTML = home() + voiceCapture(button.dataset.voice)
+  }))
+  let reviewKind = 'camera'
+  const reviewPhone = document.querySelector('#review-phone')
+  const renderReview = (mode = 'review') => { reviewPhone.innerHTML = home() + reviewSheet(reviewKind, mode) }
+  document.querySelectorAll('[data-review]').forEach((button) => button.addEventListener('click', () => {
+    document.querySelectorAll('[data-review]').forEach((b) => { b.setAttribute('aria-pressed', String(b === button)); b.classList.toggle('selected', b === button) })
+    reviewKind = button.dataset.review
+    renderReview()
+  }))
+  reviewPhone.addEventListener('click', (event) => {
+    const category = event.target.closest('[data-category]')
+    if (category) { selectedCategory[reviewKind] = category.dataset.category; renderReview(); return }
+    const action = event.target.closest('[data-review-action]')
+    if (action) renderReview(action.dataset.reviewAction)
+  })
+  reviewPhone.addEventListener('input', (event) => {
+    if (event.target.matches('.review-note input')) event.target.closest('.review-note').querySelector('.hint-mark')?.remove()
+  })
+</script>
+</body>
+</html>
