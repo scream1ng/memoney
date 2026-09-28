@@ -301,3 +301,29 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 @media (prefers-reduced-motion: reduce) {
   *, *::before { animation: none !important; transition: none !important; }
 }
+
+/* API usage */
+.usage { padding: 16px; }
+.usage h2 { font-size: 20px; margin: 0; }
+.usage h3 { font-size: 16px; margin: 20px 0 8px; }
+.usage-period { display: flex; margin: 12px 0; }
+.usage-period button { flex: 1; padding: 0 16px; }
+.usage-range { gap: 4px; font-size: 13px; text-align: center; }
+.usage-range .icon-btn { flex-shrink: 0; }
+.usage-result { min-height: 140px; padding-top: 16px; }
+.usage-amount { font-size: 34px; letter-spacing: -1px; overflow-wrap: anywhere; }
+.usage p { margin: 8px 0; }
+.usage-counts { display: flex; gap: 20px; font-size: 13px; margin: 20px 0; color: var(--muted); }
+.usage-counts strong { display: block; font-size: 20px; color: var(--ink); }
+.usage-accounts details { border-top: .5px solid var(--sep); }
+.usage-accounts summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; cursor: pointer; }
+.usage-person { display: grid; min-width: 0; gap: 4px; overflow-wrap: anywhere; }
+.usage-accounts .num { flex-shrink: 0; font-size: 14px; }
+.usage-note { border-top: .5px solid var(--sep); padding-top: 12px; line-height: 1.5; }
+.usage button:disabled { opacity: .4; cursor: default; }
+.usage .sub { font-size: 13px; color: var(--muted); }
+.usage-period button[aria-pressed='true'] { color: var(--ink); }
+@media (max-width: 350px) { .tabs a { width: 48px; } }
+.usage-chevron { flex-shrink: 0; color: var(--muted); }
+.usage-accounts details[open] .usage-chevron { transform: rotate(90deg); }
+.usage-person { flex: 1; }

@@ -25,3 +25,24 @@ Validation: `npm test`, `npm run build`, `npm run lint`.
 API references: [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna),
 [transcription](https://developers.openai.com/api/docs/guides/speech-to-text),
 [structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+
+### API usage
+
+Settings shows the signed-in account’s estimated OpenAI costs. The verified
+`imbaoak@gmail.com` account also has an Admin tab with weekly/monthly totals and
+all accounts, including accounts with no activity. Authorization is enforced on
+the server; personal Home is unchanged.
+
+Server startup adds the `api_usage` table and indexes idempotently. Tracking begins
+with new camera/voice calls after deployment; old activity cannot be reconstructed.
+Each upstream call is recorded before sending, and its token counters, estimated
+USD cost and price snapshot are saved when available. Lost responses and missing
+usage appear as unpriced calls, excluded from partial totals. No photos, audio or
+transcripts are stored in this table. A voice entry can make two API calls.
+
+Periods use Australia/Melbourne calendar dates, Monday-start weeks, and exclusive
+end boundaries. Prices use Standard rates checked 2026-09-28 from the
+[OpenAI pricing page](https://developers.openai.com/api/docs/pricing) and
+[Luna model page](https://developers.openai.com/api/docs/models/gpt-6-luna).
+Update `server/usage.ts` when prices or models change; saved historical estimates
+remain unchanged. These estimates are not the OpenAI invoice or credit balance.

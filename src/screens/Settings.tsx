@@ -1,5 +1,6 @@
 import { Check, ChevronRight, Coins, Fingerprint, LogOut } from 'lucide-react'
 import { useState } from 'react'
+import { Usage } from './Usage'
 import { authClient } from '../lib/auth'
 import { currencyAtom, useAtom } from '../lib/store'
 
@@ -18,6 +19,7 @@ export function Settings() {
   return (
     <main className="screen">
       <div className="brand"><img src="/favicon.svg" alt="" />MeMoney</div>
+      <Usage />
       <section className="card set">
         <button className="row between" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <span className="row"><span className="ico" style={{ background: '#ff9500' }}><Coins size={18} /></span>Currency</span>
