@@ -1,7 +1,8 @@
-import { CalendarDays, Camera, Delete, Ellipsis, LoaderCircle, Mic, PenLine, Square, Store, Trash2, TriangleAlert } from 'lucide-react'
+import { CalendarDays, Camera, Check, ChevronRight, Delete, Ellipsis, LoaderCircle, Mic, PenLine, Square, Store, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TypeToggle } from '../components/ui'
+import { clearCapture, peekCapture, type Capture } from '../lib/capture'
 import { CATEGORIES, category } from '../lib/categories'
 import { amountToInput, dayLabel, money, parseAmount, today, uid } from '../lib/format'
 import { parse, type Guess } from '../lib/parse'
@@ -30,6 +31,16 @@ export function AddSheet() {
   const navigate = useNavigate()
   const location = useLocation()
   const [symbol] = useAtom(currencyAtom)
+  const [params] = useSearchParams()
+  // opened from the + menu's Camera or Voice: parse first, then show the review layout
+  const [capture] = useState<Capture | undefined>(() => {
+    const via = params.get('via')
+    const c = peekCapture()
+    return !id && c && ((via === 'camera' && c.kind === 'image') || (via === 'voice' && c.kind === 'audio')) ? c : undefined
+  })
+  const review = !!capture
+  const [editAmount, setEditAmount] = useState(false)
+  const orbRef = useRef<HTMLDivElement>(null)
 
   const [type, setType] = useState<TxType>(existing?.type ?? 'expense')
   const [input, setInput] = useState(existing ? amountToInput(existing.amount) : '')
@@ -43,13 +54,13 @@ export function AddSheet() {
   // a category picked from More takes the 4th slot for this session
   const [extra, setExtra] = useState<string | undefined>(existing?.category)
   const [sub, setSub] = useState<'cats' | 'photo'>()
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [phase, setPhase] = useState<Phase>(capture ? (capture.kind === 'audio' ? 'requesting' : 'busy') : 'idle')
   const [voicePath, setVoicePath] = useState(FLAT_WAVE)
-  const [source, setSource] = useState<'audio' | 'image'>('image')
+  const [source, setSource] = useState<'audio' | 'image'>(capture?.kind ?? 'image')
   const [heard, setHeard] = useState('')
   const [parseError, setParseError] = useState('')
   // kept in memory only until attachment storage is decided (issue #1)
-  const [photo, setPhoto] = useState<Blob>()
+  const [photo, setPhoto] = useState<Blob | undefined>(capture?.kind === 'image' ? capture.file : undefined)
   const fileRef = useRef<HTMLInputElement>(null)
   const recRef = useRef<MediaRecorder | null>(null)
   const parseReq = useRef<AbortController | null>(null)
@@ -88,10 +99,18 @@ export function AddSheet() {
     alive.current = true
     return () => {
       alive.current = false
+      clearCapture()
       parseReq.current?.abort()
       if (recRef.current?.state === 'recording') recRef.current.stop()
     }
   }, [])
+
+  // deferred a tick so StrictMode's dev remount doesn't start it twice
+  useEffect(() => {
+    if (!capture) return
+    const t = setTimeout(() => void (capture.kind === 'image' ? run(capture.file, 'image') : startMic(capture.stream)))
+    return () => clearTimeout(t)
+  }, [capture]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shownAmount = input ? `${symbol}${group(input)}` : money(0, symbol)
   // shrink to fit one line: 46px down to 26px
@@ -104,7 +123,13 @@ export function AddSheet() {
       size -= 2
       el.style.fontSize = `${size}px`
     }
-  }, [shownAmount, hints])
+  }, [shownAmount, hints, editAmount])
+
+  // a failed read lands on the amount keypad in the review layout
+  function fail() {
+    setPhase('failed')
+    setEditAmount(true)
+  }
 
   function press(k: string) {
     unhint('amount')
@@ -160,11 +185,11 @@ export function AddSheet() {
     setPhase('busy')
     try {
       const guess = await parse(blob, kind, symbol, request.signal)
-      if (alive.current && !request.signal.aborted) setPhase(apply(guess) ? 'idle' : 'failed')
+      if (alive.current && !request.signal.aborted) if (apply(guess)) setPhase('idle'); else fail()
     } catch (err) {
       if (alive.current && !request.signal.aborted) {
         setParseError(err instanceof Error ? err.message : '')
-        setPhase('failed')
+        fail()
       }
     }
   }
@@ -184,12 +209,16 @@ export function AddSheet() {
       else { micReq.current++; setPhase('idle') } // still on the permission prompt: cancel
       return
     }
+    return startMic()
+  }
+
+  async function startMic(given?: Promise<MediaStream>) {
     const id = ++micReq.current
     setParseError('')
     setSource('audio')
     setPhase('requesting')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await (given ?? navigator.mediaDevices.getUserMedia({ audio: true }))
       if (!alive.current || id !== micReq.current) return stream.getTracks().forEach((t) => t.stop())
       let rec: MediaRecorder
       try { rec = new MediaRecorder(stream) } catch (err) {
@@ -210,7 +239,7 @@ export function AddSheet() {
         recRef.current = null
         if (!alive.current) return
         setVoicePath(FLAT_WAVE)
-        if (noSpeech) { setParseError('No speech heard. Try again.'); setPhase('failed') }
+        if (noSpeech) { setParseError('No speech heard. Try again.'); fail() }
         else void run(new Blob(chunks, { type: rec.mimeType }), 'audio')
       }
       recRef.current = rec
@@ -237,6 +266,7 @@ export function AddSheet() {
           let sum = 0
           for (const sample of samples) sum += ((sample - 128) / 128) ** 2
           const level = Math.sqrt(sum / samples.length)
+          orbRef.current?.style.setProperty('--level', String(Math.min(1, level * 6)))
           if (level < 0.012) setVoicePath(FLAT_WAVE)
           else {
             const points = ['M 0 28', 'L 20 28']
@@ -266,7 +296,7 @@ export function AddSheet() {
       }
     } catch (err) {
       console.error('[mic]', err)
-      if (alive.current && id === micReq.current) setPhase('failed')
+      if (alive.current && id === micReq.current) fail()
     }
   }
 
@@ -294,6 +324,115 @@ export function AddSheet() {
 
   const h = (f: Field) => (hints.has(f) ? 'hint' : '')
 
+  if (capture?.kind === 'audio' && working) {
+    return <VoiceView phase={phase} orbRef={orbRef} onFinish={() => void toggleMic()} onCancel={close} />
+  }
+
+  const header = (
+    <div className="handle" {...drag.handlers}>
+      <div className="grab" aria-hidden />
+      <div className="row between">
+        <label className={`chip ${date !== today() ? 'date-off' : ''} ${h('date')}`} aria-label="Date">
+          <CalendarDays size={16} />{dayLabel(date)}
+          <input type="date" aria-label="Date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); unhint('date') } }} />
+        </label>
+        <div className={hints.has('type') ? 'hint-seg' : undefined}><TypeToggle value={type} onChange={switchType} /></div>
+      </div>
+    </div>
+  )
+  const warning = phase === 'failed' && (
+    <div className="warn" role="alert">
+      <TriangleAlert size={18} />
+      {parseError || (source === 'image' ? 'Couldn’t read the receipt. Type the amount instead.' : 'Couldn’t understand that. Type it instead.')}
+    </div>
+  )
+  const keypad = (
+    <div className={`keys ${phase === 'failed' ? 'compact' : ''}`}>
+      {['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0'].map((k) => (
+        <button key={k} className="key" onClick={() => press(k)}>{k}</button>
+      ))}
+      <button className="key del" aria-label="Backspace" onClick={() => press('del')}><Delete size={24} /></button>
+    </div>
+  )
+  const readingReceipt = (
+    <div className="ai-panel" aria-live="polite">
+      {source === 'image' && photoUrl && <img className="thumb" src={photoUrl} alt="" />}
+      <LoaderCircle size={36} className="spin accent" />
+      <div className="lbl">{source === 'image' ? 'Reading receipt…' : 'Reading what you said…'}</div>
+      <div className="sub">You can review the details before saving.</div>
+    </div>
+  )
+  const amountText = (
+    <div ref={amountRef} className={`amount num ${!input ? 'empty' : type === 'income' ? 'inc' : 'exp'} ${review ? '' : h('amount')}`} aria-live="polite">
+      {shownAmount}
+    </div>
+  )
+  const catSheet = sub === 'cats' && (
+    <SubSheet label="Category" onClose={() => setSub(undefined)}>
+      <div className="cats" role="group" aria-label="Category">
+        {CATEGORIES[type].map((c) => (
+          <button key={c.id} aria-pressed={cat === c.id} onClick={() => pick(c.id)}>
+            <span className="cat" style={{ background: c.color }}><c.icon size={24} /></span>
+            <span className="lbl">{c.label}</span>
+          </button>
+        ))}
+      </div>
+    </SubSheet>
+  )
+
+  if (review) {
+    const c = cat ? category(cat) : undefined
+    const dot = <span className="hint-mark" aria-label="Guessed" />
+    return (
+      <div className="sheet-wrap" onClick={close}>
+        <div className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} role="dialog" aria-modal="true" aria-label="Review entry"
+          style={drag.style} onClick={(e) => e.stopPropagation()}>
+          {header}
+          {phase === 'busy' ? readingReceipt : (
+            <>
+              <div className="review-source">
+                {source === 'image' ? 'From your receipt' : 'From your voice'}{merchant && ` · ${merchant}`}
+                {!!hints.size && <> · {dot} = our guess, tap to change</>}
+              </div>
+              {heard && <div className="heard">“{heard}”</div>}
+              {warning}
+              {editAmount ? (
+                <div className="review-amount editing"><small>Amount</small>{amountText}</div>
+              ) : (
+                <button className="review-amount" onClick={() => setEditAmount(true)}>
+                  <small>Amount{hints.has('amount') && <> {dot}</>}</small>{amountText}<span className="edit-cue">Tap to edit</span>
+                </button>
+              )}
+              <button className="review-category" onClick={() => setSub('cats')}>
+                {c ? <span className="cat" style={{ background: c.color }}><c.icon size={24} /></span> : <span className="cat more"><Ellipsis size={24} /></span>}
+                <span className="value"><small>Category</small><strong>{c?.label ?? 'Choose category'}</strong></span>
+                {hints.has('cat') && dot}
+                <ChevronRight size={16} className="chev" />
+              </button>
+              {editAmount ? (
+                <>
+                  {keypad}
+                  <button className="review-save" onClick={() => setEditAmount(false)}>Done</button>
+                </>
+              ) : (
+                <>
+                  <label className="review-note">
+                    <span className="value"><small>Note</small>
+                      <input value={note} placeholder="Add a note" maxLength={80} onChange={(e) => { setNote(e.target.value); unhint('note') }} />
+                    </span>
+                    {hints.has('note') && dot}
+                  </label>
+                  <button className="review-save" disabled={!canSave} onClick={save}>Save entry</button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+        {catSheet}
+      </div>
+    )
+  }
+
   return (
     <div className="sheet-wrap" onClick={close}>
       <div
@@ -302,20 +441,9 @@ export function AddSheet() {
         style={drag.style}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="handle" {...drag.handlers}>
-          <div className="grab" aria-hidden />
-          <div className="row between">
-            <label className={`chip ${date !== today() ? 'date-off' : ''} ${h('date')}`} aria-label="Date">
-              <CalendarDays size={16} />{dayLabel(date)}
-              <input type="date" aria-label="Date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); unhint('date') } }} />
-            </label>
-            <div className={hints.has('type') ? 'hint-seg' : undefined}><TypeToggle value={type} onChange={switchType} /></div>
-          </div>
-        </div>
+        {header}
 
-        <div ref={amountRef} className={`amount num ${!input ? 'empty' : type === 'income' ? 'inc' : 'exp'} ${h('amount')}`} aria-live="polite">
-          {shownAmount}
-        </div>
+        {amountText}
 
         <div className="meta">
           {merchant && <span className={`chip ${h('merchant')}`} title={merchant}><Store size={16} /><span className="clip">{merchant}</span></span>}
@@ -351,27 +479,10 @@ export function AddSheet() {
             <svg className="voice-wave" viewBox="0 0 160 56" aria-hidden="true"><path d={voicePath} /></svg>
             <div><div className="lbl">{phase === 'requesting' ? 'Allow microphone access' : 'Speak naturally'}</div><div className="sub">{phase === 'requesting' ? 'Waiting for permission…' : 'Stops automatically when you finish'}</div></div>
           </div>
-        ) : phase === 'busy' ? (
-          <div className="ai-panel" aria-live="polite">
-            {source === 'image' && photoUrl && <img className="thumb" src={photoUrl} alt="" />}
-            <LoaderCircle size={36} className="spin accent" />
-            <div className="lbl">{source === 'image' ? 'Reading receipt…' : 'Reading what you said…'}</div>
-            <div className="sub">You can review the details before saving.</div>
-          </div>
-        ) : (
+        ) : phase === 'busy' ? readingReceipt : (
           <>
-            {phase === 'failed' && (
-              <div className="warn" role="alert">
-                <TriangleAlert size={18} />
-                {parseError || (source === 'image' ? 'Couldn’t read the receipt. Type the amount instead.' : 'Couldn’t understand that. Type it instead.')}
-              </div>
-            )}
-            <div className={`keys ${phase === 'failed' ? 'compact' : ''}`}>
-              {['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0'].map((k) => (
-                <button key={k} className="key" onClick={() => press(k)}>{k}</button>
-              ))}
-              <button className="key del" aria-label="Backspace" onClick={() => press('del')}><Delete size={24} /></button>
-            </div>
+            {warning}
+            {keypad}
           </>
         )}
 
@@ -381,7 +492,7 @@ export function AddSheet() {
             <Camera size={24} />{photo && <span className="dot" />}
           </button>
           <button className={`round ${phase === 'rec' || phase === 'requesting' ? 'voice-stop' : ''}`} aria-label={phase === 'rec' ? 'Stop recording' : phase === 'requesting' ? 'Cancel recording' : 'Voice entry'}
-            disabled={phase === 'busy'} onClick={toggleMic}>
+            disabled={phase === 'busy'} onClick={() => void toggleMic()}>
             {phase === 'rec' || phase === 'requesting' ? <><Square size={14} fill="currentColor" />{phase === 'rec' ? 'Stop' : 'Cancel'}</> : <Mic size={24} />}
           </button>
           {existing && (
@@ -394,18 +505,7 @@ export function AddSheet() {
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
       </div>
 
-      {sub === 'cats' && (
-        <SubSheet label="Category" onClose={() => setSub(undefined)}>
-          <div className="cats" role="group" aria-label="Category">
-            {CATEGORIES[type].map((c) => (
-              <button key={c.id} aria-pressed={cat === c.id} onClick={() => pick(c.id)}>
-                <span className="cat" style={{ background: c.color }}><c.icon size={24} /></span>
-                <span className="lbl">{c.label}</span>
-              </button>
-            ))}
-          </div>
-        </SubSheet>
-      )}
+      {catSheet}
       {sub === 'photo' && photoUrl && (
         <SubSheet label="Receipt" onClose={() => setSub(undefined)}>
           <img className="photo" src={photoUrl} alt="Receipt" />
@@ -415,6 +515,31 @@ export function AddSheet() {
           </div>
         </SubSheet>
       )}
+    </div>
+  )
+}
+
+/** Full-screen listening view for Voice from the + menu. Words come back with the review, not live. */
+function VoiceView({ phase, orbRef, onFinish, onCancel }: {
+  phase: Phase; orbRef: React.RefObject<HTMLDivElement | null>; onFinish: () => void; onCancel: () => void
+}) {
+  const [status, guide] = phase === 'busy'
+    ? ['Reading what you said…', 'You can check it before saving']
+    : phase === 'requesting'
+      ? ['Connecting microphone', 'Allow microphone access']
+      : ['Listening', 'Say the amount and what it was for']
+  return (
+    <div className={`voice-mode ${phase}`} role="dialog" aria-modal="true" aria-label="Voice entry">
+      <div className="vm-title">Voice entry</div>
+      <div className="vm-center">
+        <div className="orb-wrap" aria-hidden><div ref={orbRef} className="orb" /></div>
+        <div className="vm-status" aria-live="polite">{phase === 'rec' && <span className="voice-dot" />}{status}</div>
+        <p className="vm-guide">{guide}</p>
+      </div>
+      <div className="vm-bar">
+        <button className="vm-round finish" aria-label="Finish recording" disabled={phase !== 'rec'} onClick={onFinish}><Check size={26} strokeWidth={2.4} /></button>
+        <button className="vm-round cancel" aria-label="Cancel voice entry" onClick={onCancel}><X size={26} strokeWidth={2.4} /></button>
+      </div>
     </div>
   )
 }
