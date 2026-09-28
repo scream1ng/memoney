@@ -8,6 +8,7 @@ import pg from 'pg'
 import type { Tx } from '../src/lib/types.ts'
 import { usageSchema, usageRecorder, usageRoutes } from './usage.ts'
 import { parseRoutes } from './parse.ts'
+import { pgPhotoStore, photoRoutes, photoSchema } from './photos.ts'
 
 pg.types.setTypeParser(20, Number) // bigint → number
 pg.types.setTypeParser(1082, (v) => v) // date → 'YYYY-MM-DD'
@@ -49,6 +50,7 @@ await db.query(`
 `)
 
 await db.query(usageSchema)
+await db.query(photoSchema)
 
 type Vars = { Variables: { userId: string } }
 const app = new Hono<Vars>()
@@ -72,12 +74,18 @@ app.use('/api/tx/*', async (c, next) => {
   await next()
 })
 
-const COLS = `id, type, amount, category, date, note, merchant, created_at as "createdAt"`
+const COLS = `id, type, amount, category, date, note, merchant, created_at as "createdAt",
+  (select a.created_at from attachments a where a.tx_id = transactions.id) as "photoAt"`
 
 app.get('/api/tx/', async (c) => {
   const { rows } = await db.query(`select ${COLS} from transactions where user_id = $1`, [c.get('userId')])
-  return c.json(rows.map((r) => ({ ...r, note: r.note ?? undefined, merchant: r.merchant ?? undefined })))
+  return c.json(rows.map((r) => ({ ...r, note: r.note ?? undefined, merchant: r.merchant ?? undefined, photoAt: r.photoAt ?? undefined })))
 })
+
+app.route('/api/tx', photoRoutes(pgPhotoStore(db), async (request) => {
+  const session = await auth.api.getSession({ headers: request.headers })
+  return session?.user.id
+}))
 
 app.put('/api/tx/:id', async (c) => {
   const t = (await c.req.json()) as Tx

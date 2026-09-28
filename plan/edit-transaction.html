@@ -1,0 +1,148 @@
+<!doctype html>
+<!--
+MeMoney prototype: Edit transaction + saved receipt (2026-09-29)
+
+Problems
+- #1 Receipt photos are never stored (AddSheet keeps them in memory only), so a saved transaction has no attachment to open.
+- #2 Tapping a transaction opens the old Add layout (big amount + keypad + round buttons), not the newer review-sheet style.
+
+Decisions
+- Tapping a row opens the edit sheet in the review-sheet style. It reuses the real classes: review-amount, review-category, review-note, review-save.
+- Top row: date chip on the left (blue when not today) and −/+ on the right, the same as the review sheet.
+- The line under the top row shows the merchant (if any) and the receipt state. No "our guess" dots, because this is a saved entry.
+- Amount card: tap to edit. The keypad appears inside the sheet with a Done button, the same as review.
+- Category row: tap opens the existing Category sub-sheet.
+- Note row: edit inline.
+- Receipt row: a thumbnail with "Receipt" and a chevron opens a full photo sub-sheet with Replace and Remove.
+  With no receipt, the row is "Add receipt photo" and opens the phone's photo chooser.
+- Bottom: a red round Delete on the left (tap once to arm it, tap again to delete) and "Save changes" filling the rest (blue, disabled until something changes).
+- Storage: a Postgres `attachments` table (tx_id PK/FK on delete cascade, user_id, mime, bytes bytea). The image is shrunk on the phone to at most 1600px as JPEG before upload.
+  The app only calls PUT/GET/DELETE /api/tx/:id/photo, and the server wraps storage in put/get/remove so a later move to a bucket doesn't touch the app.
+  Tx gets `photoAt?: number` from the list query (the attachment's created_at), used as ?v= in the photo URL so a replaced photo is never served from cache.
+- Photos from Camera capture and from the edit sheet are uploaded after the transaction is saved.
+
+Settled with the user
+- Manual (+ → Manual) keeps the keypad-first layout for fast typing.
+- Home rows with a receipt show a small paperclip.
+- The Camera review sheet also gets the Receipt row, so the photo is visible before saving and is uploaded with the entry.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeMoney — edit transaction</title>
+<link rel="stylesheet" href="../src/styles.css">
+<style>
+  html { height: auto !important; overflow-y: auto !important; position: static !important; overscroll-behavior: auto !important; }
+  body { height: auto !important; overflow: visible !important; position: static !important; overscroll-behavior: auto !important; }
+  body { padding: 24px 16px 48px; background: #e5e5ea; }
+  .proto-title { max-width: 1200px; margin: 0 auto 6px; font-size: 22px; font-weight: 700; }
+  .proto-sub { max-width: 1200px; margin: 0 auto 20px; color: #6e6e73; font-size: 14px; }
+  .frames { max-width: 1200px; margin: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 28px 22px; }
+  .frame h2 { margin: 0 0 10px 5px; color: #3a3a3c; font-size: 14px; font-weight: 600; }
+  .phone { width: 380px; max-width: 100%; height: 760px; position: relative; overflow: hidden; border-radius: 42px; background: var(--bg); box-shadow: 0 0 0 9px #1c1c1e; }
+  .phone .screen { min-height: 100%; padding-top: 52px; }
+  .phone .dock { position: absolute; }
+  .phone .sheet-wrap { position: absolute; animation: none; }
+  .phone .sheet { max-height: 740px; overflow: hidden; animation: none; }
+  .phone .tx { display: flex; }
+  .icon { width: 20px; height: 20px; display: block; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .icon.small { width: 16px; height: 16px; }
+  .cat .icon { width: 20px; height: 20px; }
+  .review-category .cat .icon { width: 24px; height: 24px; }
+  .fab .icon { width: 28px; height: 28px; stroke-width: 2.4; }
+  .tapped { background: var(--fill) !important; }
+  .clip-mark { color: var(--muted); margin-right: 6px; }
+  .clip-mark .icon { width: 14px; height: 14px; }
+
+  /* ---- new in this round ---- */
+  .review-receipt { width: 100%; min-height: 64px; padding: 10px 14px; border-radius: 16px; background: var(--card); display: flex; align-items: center; gap: 12px; text-align: left; }
+  .review-receipt .thumb { width: 44px; height: 56px; border-radius: 8px; }
+  .review-receipt .value { flex: 1; display: grid; gap: 2px; }
+  .review-receipt small { color: var(--muted); font-size: 13px; }
+  .review-receipt strong { font-size: 16px; font-weight: 600; }
+  .review-receipt .add { width: 44px; height: 44px; border-radius: 14px; background: var(--fill); color: var(--accent); display: grid; place-items: center; }
+  .review-receipt .add + .value strong { color: var(--accent); }
+  .review-receipt > .icon { color: var(--muted); width: 16px; height: 16px; }
+  .edit-bar { display: flex; gap: 10px; align-items: center; }
+  .edit-bar .review-save { flex: 1; width: auto; }
+  .edit-bar .round.exp { color: var(--exp); }
+  .keys .key .icon { width: 24px; height: 24px; }
+  .flow { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px; border-radius: 16px; background: var(--card); font-size: 13px; }
+  .flow span { padding: 10px 12px; background: var(--fill); border-radius: 12px; }
+  .flow b { color: var(--muted); }
+  .flow code { font-size: 12px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="pie" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9v9zM12 3a9 9 0 0 1 9 9h-9z"/></symbol>
+  <symbol id="settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="camera" viewBox="0 0 24 24"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/></symbol>
+  <symbol id="calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></symbol>
+  <symbol id="paperclip" viewBox="0 0 24 24"><path d="m21 11-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"/></symbol>
+  <symbol id="food" viewBox="0 0 24 24"><path d="M4 3v7a3 3 0 0 0 6 0V3M7 3v18M17 3c-2 2-3 5-3 9h5V3M19 12v9"/></symbol>
+  <symbol id="car" viewBox="0 0 24 24"><path d="m5 16-1 3h2l1-2h10l1 2h2l-1-3M4 16V9l2-4h12l2 4v7zM4 10h16"/></symbol>
+  <symbol id="shop" viewBox="0 0 24 24"><path d="M4 8h16l-1 13H5zM9 9V6a3 3 0 0 1 6 0v3"/></symbol>
+  <symbol id="zap" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-12h-7z"/></symbol>
+  <symbol id="backspace" viewBox="0 0 24 24"><path d="M9 4H21v16H9L2 12zM12 9l6 6M18 9l-6 6"/></symbol>
+</svg>
+<h1 class="proto-title">MeMoney · edit transaction + saved receipt</h1>
+<p class="proto-sub">Tap a row → same card layout as the Camera/Voice review sheet. Receipt is stored and opens from the sheet.</p>
+<div class="frames" id="frames"></div>
+<script>
+  const icon = (name, cls = '') => `<svg class="icon ${cls}" aria-hidden="true"><use href="#${name}"></use></svg>`
+  // placeholder receipt image
+  const receipt = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420"><rect width="300" height="420" fill="#fbfaf6"/><g font-family="monospace" font-size="15" fill="#333"><text x="150" y="44" text-anchor="middle" font-size="20" font-weight="bold">MARKET</text><text x="150" y="66" text-anchor="middle" font-size="12">28/09/2026 18:42</text><text x="24" y="110">Rice 5kg</text><text x="276" y="110" text-anchor="end">320.00</text><text x="24" y="136">Eggs x30</text><text x="276" y="136" text-anchor="end">165.00</text><text x="24" y="162">Vegetables</text><text x="276" y="162" text-anchor="end">248.00</text><text x="24" y="188">Chicken</text><text x="276" y="188" text-anchor="end">289.00</text><text x="24" y="214">Milk</text><text x="276" y="214" text-anchor="end">218.00</text><text x="24" y="270" font-weight="bold">TOTAL</text><text x="276" y="270" text-anchor="end" font-weight="bold">1,240.00</text></g><path d="M24 240h252" stroke="#999" stroke-dasharray="4 4"/></svg>`)
+  const txs = [
+    {merchant:'Noodle House',note:'Lunch with Mai',amount:'−฿320.00',icon:'food',color:'#c93400'},
+    {merchant:'Metro',note:'',amount:'−฿89.00',icon:'car',color:'#007aff'},
+    {merchant:'Market',note:'Groceries',amount:'−฿1,240.00',icon:'shop',color:'#ff2d55',photo:true},
+    {merchant:'Electricity',note:'',amount:'−฿610.00',icon:'zap',color:'#af52de'},
+  ]
+  // static DOM equivalents of TxList / Dock
+  const row = (t, tapped) => `<div class="swipe"><button class="row tx ${tapped ? 'tapped' : ''}"><span class="cat" style="background:${t.color}">${icon(t.icon)}</span><div class="grow"><div>${t.merchant}</div>${t.note ? `<div class="sub">${t.note}</div>` : ''}</div>${t.photo ? `<span class="clip-mark" title="Has receipt">${icon('paperclip')}</span>` : ''}<span class="num exp">${t.amount}</span></button></div>`
+  const dock = `<nav class="dock"><div class="glass tabs"><a class="active" aria-label="Home">${icon('home')}</a><a aria-label="Stats">${icon('pie')}</a><a aria-label="Settings">${icon('settings')}</a></div><button class="glass fab" aria-label="Add">${icon('plus')}</button></nav>`
+  const home = (tapped = -1) => `<main class="screen"><div class="row between month"><h1>September 2026</h1><div class="row"><button class="icon-btn">${icon('chevron-left')}</button><button class="icon-btn">${icon('chevron-right')}</button></div></div><section class="summary"><div class="num balance">฿12,581.00</div><div class="io"><span class="num inc">+฿18,000.00</span><span class="num exp">−฿5,419.00</span></div></section><div class="seg filter"><button class="n" aria-pressed="true">${icon('list')}</button><button class="e">${icon('minus')}</button><button class="i">${icon('plus')}</button></div><div class="card list"><section><div class="day">Today</div>${row(txs[0], tapped === 0)}${row(txs[1], tapped === 1)}</section><section><div class="day">Yesterday</div>${row(txs[2], tapped === 2)}${row(txs[3], tapped === 3)}</section></div></main>${dock}`
+
+  // edit sheet, same DOM shape as AddSheet's review layout
+  function edit({ photo = true, keypad = false, armed = false, dirty = false, sub = '' } = {}) {
+    const header = `<div class="handle"><div class="grab"></div><div class="row between"><label class="chip date-off">${icon('calendar','small')}Yesterday<input type="date" value="2026-09-28"></label><div class="seg"><button class="e" aria-pressed="true">${icon('minus')}</button><button class="i">${icon('plus')}</button></div></div></div>`
+    const source = `<div class="review-source">Market${photo ? ' · receipt attached' : ''}</div>`
+    const amount = keypad
+      ? `<div class="review-amount editing"><small>Amount</small><div class="amount num exp">฿1,240</div></div>`
+      : `<button class="review-amount"><small>Amount</small><div class="amount num exp">฿1,240.00</div><span class="edit-cue">Tap to edit</span></button>`
+    const category = `<button class="review-category"><span class="cat" style="background:#ff2d55">${icon('shop')}</span><span class="value"><small>Category</small><strong>Shopping</strong></span>${icon('chevron-right','small chev')}</button>`
+    const note = `<label class="review-note"><span class="value"><small>Note</small><input value="Groceries" maxlength="80"></span></label>`
+    const receiptRow = photo
+      ? `<button class="review-receipt"><img class="thumb" src="${receipt}" alt=""><span class="value"><small>Receipt</small><strong>View photo</strong></span>${icon('chevron-right')}</button>`
+      : `<button class="review-receipt"><span class="add">${icon('camera')}</span><span class="value"><small>Receipt</small><strong>Add receipt photo</strong></span></button>`
+    const keys = `<div class="keys">${['7','8','9','4','5','6','1','2','3','.','0'].map(k => `<button class="key">${k}</button>`).join('')}<button class="key del">${icon('backspace')}</button></div>`
+    const bar = `<div class="edit-bar"><button class="round ${armed ? 'armed' : 'exp'}" aria-label="${armed ? 'Confirm delete' : 'Delete'}">${icon('trash')}</button><button class="review-save" ${dirty ? '' : 'disabled'}>Save changes</button></div>`
+    const body = keypad
+      ? `${amount}${category}${keys}<button class="review-save">Done</button>`
+      : `${amount}${category}${note}${receiptRow}${bar}`
+    const photoSheet = sub === 'photo' ? `<div class="sheet-wrap sub"><div class="glass sheet"><div class="handle"><div class="grab"></div><h2 class="sheet-title">Receipt</h2></div><img class="photo" src="${receipt}" alt="Receipt"><div class="row"><button class="pill grow">Replace</button><button class="pill grow exp">Remove</button></div></div></div>` : ''
+    return `<div class="sheet-wrap"><div class="glass sheet review-sheet ${sub ? 'behind' : ''}">${header}${source}${body}</div>${photoSheet}</div>`
+  }
+
+  const frame = (title, content) => `<section class="frame"><h2>${title}</h2><div class="phone">${content}</div></section>`
+  document.querySelector('#frames').innerHTML = [
+    frame('1 · Home: tap a row (📎 = has receipt, proposal)', home(2)),
+    frame('2 · Edit sheet: with receipt', home() + edit()),
+    frame('3 · Edit sheet: no receipt', home() + edit({ photo: false })),
+    frame('4 · Tap amount → keypad + Done', home() + edit({ keypad: true })),
+    frame('5 · Tap receipt → full photo', home() + edit({ sub: 'photo' })),
+    frame('6 · Changed → Save on · Delete armed', home() + edit({ armed: true, dirty: true })),
+    `<div class="flow"><span>Save tx</span><b>→</b><span>PUT <code>/api/tx/:id</code></span><b>→</b><span>shrink to 1600px JPEG</span><b>→</b><span>PUT <code>/api/tx/:id/photo</code></span><b>→</b><span>Postgres <code>attachments</code> (swap for bucket later)</span></div>`,
+  ].join('')
+</script>
+</body>
+</html>

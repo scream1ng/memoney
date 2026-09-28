@@ -1,4 +1,4 @@
-import { Camera, ChartPie, ChevronLeft, ChevronRight, House, Mic, PenLine, Plus, Settings, Shield, Trash2, type LucideIcon } from 'lucide-react'
+import { Camera, ChartPie, ChevronLeft, ChevronRight, House, Mic, Paperclip, PenLine, Plus, Settings, Shield, Trash2, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { setCapture } from '../lib/capture'
@@ -149,6 +149,7 @@ export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => voi
                 <div>{t.merchant || category(t.category).label}</div>
                 {t.note && <div className="sub">{t.note}</div>}
               </div>
+              {t.photoAt && <Paperclip size={14} className="clip-mark" aria-label="Has receipt" />}
               <Amount tx={t} />
             </SwipeRow>
           ))}

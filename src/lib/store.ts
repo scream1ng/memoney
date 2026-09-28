@@ -4,7 +4,8 @@ import { monthKey, today } from './format'
 
 export interface TxRepo {
   list(): Tx[]
-  save(tx: Tx): void
+  /** photo: a JPEG to attach, null to remove it, undefined to leave it */
+  save(tx: Tx, photo?: Blob | null): void
   remove(id: string): void
   subscribe(fn: () => void): () => void
 }
@@ -35,9 +36,20 @@ function apiRepo(): TxRepo & { load(): Promise<void> } {
       await importLocal(put)
       set(await (await call('')).json())
     },
-    save(tx: Tx) {
-      set([...cache.filter((t) => t.id !== tx.id), tx])
-      put(tx).catch(reload)
+    save(tx: Tx, photo?: Blob | null) {
+      const saved = photo === null ? { ...tx, photoAt: undefined } : tx
+      set([...cache.filter((t) => t.id !== tx.id), saved])
+      // the photo row points at the transaction, so it goes up only after the transaction exists
+      put(tx)
+        .then(async () => {
+          if (photo === undefined) return
+          if (photo === null) return void await call(`${tx.id}/photo`, { method: 'DELETE' })
+          const { photoAt } = (await (await call(`${tx.id}/photo`, {
+            method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: photo,
+          })).json()) as { photoAt: number }
+          set(cache.map((t) => (t.id === tx.id ? { ...t, photoAt } : t)))
+        })
+        .catch(reload)
     },
     remove(id: string) {
       set(cache.filter((t) => t.id !== id))
