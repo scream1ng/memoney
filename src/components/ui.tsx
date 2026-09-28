@@ -101,7 +101,7 @@ export function Dock({ admin = false }: { admin?: boolean }) {
           </div>
         </>
       )}
-      <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
     </nav>
   )
 }

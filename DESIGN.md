@@ -19,13 +19,15 @@ All styles live in `src/styles.css`, with shared components in `src/components/u
 | `--accent-ink` | `#fff` | text on accent |
 | `--exp` | `#d70015` | expense, destructive, recording, errors |
 | `--inc` | `#248a3d` | income |
+| `--note` | `#b07000` | note field tile icon (amber; kept off `--accent` blue so it never reads as a category) |
 | `--glass-bg` | `rgba(255,255,255,.62)` (sheet: `rgba(242,242,247,.9)`) | `.glass` surfaces |
 | pressed row/key | `#e5e5ea` | `:active` on `.tx`/`.key` (hardcoded) |
 | grab handle | `#c7c7cc` | `.grab` (hardcoded) |
 
 Tints are `color-mix(in srgb, var(--x) N%, transparent)`:
 - hint background is accent at 14–18%;
-- warn background is exp at 10%.
+- warn background is exp at 10%;
+- field-row tiles are `--note` at 16% or accent at 12%, with the icon in the full color.
 
 Each category has its own color (`src/lib/categories.ts`, iOS system colors). These are only used as the fill of an icon tile or a bar, never as text.
 
@@ -58,7 +60,7 @@ The base unit is 4px. The values in use are 2, 4, 6, 8, 10, 12, 14, 16, 20 and 2
 | 38px | sheet |
 | 26px | empty-state icon tile |
 | 16px | cards, row groups, keys, pills, ai-panel, 52px category tiles |
-| 14px | amount hint |
+| 14px | amount hint, 44px tiles (review category, field rows) |
 | 12px | note input, warn |
 | 10px | 36px category tiles, thumbnail, currency buttons |
 | 8px | settings `.ico` (30px) |
@@ -91,12 +93,13 @@ Cards have **no** shadow.
 | Floating tab bar | `.dock .glass.tabs` (NavLink) | `.active` accent on fill |
 | Segmented (44px controls) | `.seg` / `TypeToggle` | `[aria-pressed=true]` card and raised; `.e` exp, `.i` inc, `.n` ink |
 | Chip (44px) | `.chip` | `.ph` muted, `.date-off` accent, `.hint` accent tint |
-| Category tile | `CatIcon` `.cat` (36px list, 52px picker; 44px quick picker below 350px) | `[aria-pressed]` accent ring; `.hint` label tint; `:active` scale |
+| Category tile | `CatIcon` `.cat` (36px list, 44px review row, 52px picker; 44px quick picker below 350px) | `[aria-pressed]` accent ring; `.hint` label tint; `:active` scale |
 | Tx row | `TxList` `.tx` in grouped card | `:active` #e5e5ea; hairline from 64px |
 | Settings row | `.set .row` (48px min) + `.ico` | `.danger` exp text |
 | Sheet | `.sheet-wrap > .glass.sheet` | `.sub` stacked; `.behind`; drag down / tap outside to close |
 | Keypad | `.keys .key` (50px, 3 columns) | `.compact` 44px; `.del` muted; `:active` |
 | Working / listening panel | `.ai-panel` (fixed 224px, replaces keypad) | `.voice-wave` responds to microphone level while recording; `.thumb` + `.spin` for busy |
+| Field row (review/edit sheet) | `.review-category` / `.review-row`: own card each (16px radius, 64px min, 12×16 padding), 44px leading tile, label `small` + value, trailing chevron if it opens something | `.tile.note` note tint; `.tile.add` accent tint (receipt empty); receipt photo fills the tile (`object-fit: cover`) with a 0.5px `--sep` ring; focus = inset 2px accent outline |
 | Inline error | `.warn` | exp tint with an icon |
 | Empty state | `.empty .big.bob` | — |
 | Sign-in button | `.signin button` (52px) | `.primary` ink fill |
@@ -114,6 +117,8 @@ Icons are `lucide-react`: 18–22px inline, 24px in 52px tiles, 28px in the FAB.
 - **Don't** use gradients, or borders on cards or buttons (hairline `--sep` separators only).
 - **Don't** color amounts in lists red: expense amounts in the list and the income/expense line are ink, and only income is green.
 - **Don't** add new shadow levels or radii outside the tables above.
+- **Don't** use a solid-color tile for anything but a category. Non-category field tiles (note, receipt) use a soft tint so they never look like a second category.
+- **Don't** leave a field row without a leading tile; every row in a sheet starts with one so labels line up.
 - **Don't** use `.empty` for anything but the empty state, because it adds 48px padding. `.amount.empty` has to undo it.
 
 ## Known drift
