@@ -1,10 +1,10 @@
-import { Camera, ChartPie, ChevronLeft, ChevronRight, House, Mic, Paperclip, PenLine, Plus, Settings, Shield, type LucideIcon } from 'lucide-react'
+import { Camera, ChartPie, House, Mic, Paperclip, PenLine, Plus, Settings, Shield, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { setCapture } from '../lib/capture'
 import { category, useCustomCategories } from '../lib/categories'
-import { dayLabel, money, monthLabel, shiftMonth } from '../lib/format'
-import { currencyAtom, monthAtom, useAtom } from '../lib/store'
+import { dayLabel, money } from '../lib/format'
+import { currencyAtom, useAtom } from '../lib/store'
 import type { Tx, TxType } from '../lib/types'
 
 export function CatIcon({ id, size = 22 }: { id: string; size?: number }) {
@@ -15,23 +15,6 @@ export function CatIcon({ id, size = 22 }: { id: string; size?: number }) {
     <span className="cat" style={{ background: c.color }} aria-label={c.label} role="img">
       <Icon size={size} strokeWidth={2} />
     </span>
-  )
-}
-
-export function MonthSwitch() {
-  const [month, setMonth] = useAtom(monthAtom)
-  return (
-    <div className="row between month">
-      <h1>{monthLabel(month)}</h1>
-      <div className="row">
-        <button className="icon-btn" aria-label="Previous month" onClick={() => setMonth(shiftMonth(month, -1))}>
-          <ChevronLeft size={20} />
-        </button>
-        <button className="icon-btn" aria-label="Next month" onClick={() => setMonth(shiftMonth(month, 1))}>
-          <ChevronRight size={20} />
-        </button>
-      </div>
-    </div>
   )
 }
 
