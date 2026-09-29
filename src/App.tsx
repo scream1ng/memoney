@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, type Location } from 'react-router-dom'
 import { isAdmin } from './lib/access'
 import { Usage } from './screens/Usage'
@@ -16,6 +16,8 @@ import { Stats } from './screens/Stats'
 
 function Shell() {
   const location = useLocation()
+  const [exportAt, setExportAt] = useState<string>()
+  const [addCategoryRequest, setAddCategoryRequest] = useState(0)
   const { data } = authClient.useSession()
   const admin = isAdmin(data?.user)
   // sheet routes render over the page they were opened from
@@ -24,10 +26,11 @@ function Shell() {
     <>
       <Routes location={bg ?? location}>
         <Route path="/" element={<Home />} />
-        <Route path="/stats" element={<Stats />} />
-        <Route path="/admin" element={admin ? <main className="screen"><h1>Admin</h1><Usage admin /></main> : <Navigate to="/" replace />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/categories" element={<Categories />} />
+        <Route path="/stats" element={<Stats exportOpen={exportAt === location.key} onCloseExport={() => setExportAt(undefined)} />} />
+        <Route path="/admin" element={<Navigate to={admin ? '/settings/admin' : '/settings'} replace />} />
+        <Route path="/settings" element={<Settings admin={admin} />} />
+        <Route path="/settings/admin" element={admin ? <main className="screen"><h1>Admin Panel</h1><Usage admin /></main> : <Navigate to="/settings" replace />} />
+        <Route path="/settings/categories" element={<Categories addRequest={addCategoryRequest} />} />
         <Route path="/add" element={<><Home /><AddSheet /></>} />
         <Route path="/tx/:id" element={<><Home /><AddSheet /></>} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -38,7 +41,7 @@ function Shell() {
           <Route path="/tx/:id" element={<AddSheet />} />
         </Routes>
       )}
-      <Dock admin={admin} />
+      <Dock onExport={() => setExportAt(location.key)} onAddCategory={() => setAddCategoryRequest((n) => n + 1)} />
       {data?.user && <PasskeyPrompt key={data.user.id} userId={data.user.id} />}
     </>
   )

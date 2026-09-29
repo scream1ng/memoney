@@ -1,6 +1,6 @@
 # MeMoney design system
 
-iOS light look. Plain grouped grey background with white cards. Frosted glass is used only on floating chrome (dock, FAB, sheets).
+iOS light look. Plain grouped grey background with white cards. Frosted glass is used on the dock, FAB and transaction sheets; Currency and Report Export use opaque bottom sheets.
 All styles live in `src/styles.css`, with shared components in `src/components/ui.tsx`. There is no CSS framework, so reuse the existing classes.
 
 ## Tokens
@@ -58,6 +58,7 @@ The base unit is 4px. The values in use are 2, 4, 6, 8, 10, 12, 14, 16, 20 and 2
 |---|---|
 | 999px / 50% | pills, chips, seg, tabs, Save, round/icon buttons, FAB |
 | 38px | sheet |
+| 28px | Currency and Report Export bottom sheets |
 | 26px | empty-state icon tile |
 | 16px | cards, row groups, keys, pills, ai-panel, 52px category tiles |
 | 14px | amount hint, 44px tiles (review category, field rows) |
@@ -73,6 +74,7 @@ The base unit is 4px. The values in use are 2, 4, 6, 8, 10, 12, 14, 16, 20 and 2
 | FAB | `0 8px 20px rgba(0,122,255,.3)` | FAB only |
 | raised | `0 1px 4px rgba(0,0,0,.12)` | selected seg button |
 | thumb | 0.5px `--sep` ring + `0 4px 12px rgba(0,0,0,.12)` | receipt thumbnail |
+| modal | `0 -8px 30px rgba(0,0,0,.14)` | opaque Currency and Report Export sheets |
 | ring | `0 0 0 2.5px var(--bg), 0 0 0 5px var(--accent)` | selected category |
 Cards have **no** shadow.
 
@@ -89,13 +91,18 @@ Cards have **no** shadow.
 | Icon button (44px) | `.icon-btn` | `:active` scale .92 and fill-hi |
 | Round button (56px) | `.round` | `:active`; `:disabled` muted; `.armed` exp fill; `.dot` accent badge; `.voice-stop` ink pill |
 | Primary pill | `.save` (136×56; full-width in narrow edit sheets) | `:disabled` fill with muted text |
-| FAB (60px) | `.glass.fab` | `:active` scale .94 |
-| Floating tab bar | `.dock .glass.tabs` (NavLink) | `.active` accent on fill |
+| FAB (60px) | `.glass.fab` | Home: add menu; Stats: export current Week/Month; Categories: add for selected Expense/Income; hidden on other pages; `:active` scale .94 |
+| Floating tab bar | `.dock .glass.tabs` (NavLink) | Home, Stats, Settings; `.active` accent on fill; stays left when no FAB |
 | Segmented (44px controls) | `.seg` / `TypeToggle` | `[aria-pressed=true]` card and raised; `.e` exp, `.i` inc, `.n` ink |
 | Chip (44px) | `.chip` | `.ph` muted, `.date-off` accent, `.hint` accent tint |
 | Category tile | `CatIcon` `.cat` (36px list, 44px review row, 52px picker; 44px quick picker below 350px) | `[aria-pressed]` accent ring; `.hint` label tint; `:active` scale |
 | Tx row | `TxList` `.tx` in grouped card | `:active` #e5e5ea; hairline from 64px |
 | Settings row | `.set .row` (48px min) + `.ico` | `.danger` exp text |
+| Admin entry | Settings `.set .row` | Show `Admin Panel` only to admins; no admin dock tab |
+| Currency picker | `.currency-wrap > .currency-sheet` | Opaque bottom sheet above dock; selected row has accent check; selection closes sheet |
+| Report export | `.report-export-wrap > .report-export-sheet` | Opaque bottom sheet above dock; share and download rows show disabled state while PDF is unavailable |
+| Stats summary | `.stats-summary` and `.stats-income-bar` | Current Week/Month; category colors fill bar segments and legend dots; muted empty state |
+| Category management | `.category-list`, `.category-empty`, `.category-retry` | Built In above Your Categories; empty guidance points to FAB; load failure offers retry |
 | Sheet | `.sheet-wrap > .glass.sheet` | `.sub` stacked; `.behind`; drag down / tap outside to close |
 | Keypad | `.keys .key` (50px, 3 columns) | `.compact` 44px; `.del` muted; `:active` |
 | Working / listening panel | `.ai-panel` (fixed 224px, replaces keypad) | `.voice-wave` responds to microphone level while recording; `.thumb` + `.spin` for busy |
@@ -111,9 +118,11 @@ Icons are `lucide-react`: 18–22px inline, 24px in 52px tiles, 28px in the FAB.
 - **Do** mark every "AI/OCR guessed" value with the accent tint (`.hint`) until the user edits it. Never auto-save.
 - **Do** keep touch targets ≥44px, and make main actions 56px.
 - **Do** put the confirm action on the trailing (right) side.
+- **Do** keep modal sheets above the dock and show the current Stats period in exported reports; do not ask for the period again.
 - **Do** make inputs 16px or larger.
 - **Do** make an in-progress state take the same height as what it replaces, so nothing jumps.
 - **Don't** use glass on anything that isn't floating. Cards are plain `--card` with no shadow.
+- **Don't** put Admin Panel in the dock or show its Settings entry to non-admin users.
 - **Don't** use gradients, or borders on cards or buttons (hairline `--sep` separators only).
 - **Don't** color amounts in lists red: expense amounts in the list and the income/expense line are ink, and only income is green.
 - **Don't** add new shadow levels or radii outside the tables above.
@@ -128,3 +137,6 @@ Icons are `lucide-react`: 18–22px inline, 24px in 52px tiles, 28px in the FAB.
 - `#e5e5ea` and `#c7c7cc` are hardcoded instead of tokens.
 - `.empty` is a generic name that collides with other uses. See the Don't above.
 - Light mode only: `color-scheme: light`, with no dark tokens.
+- Currency and Report Export sheets repeat the same opaque backdrop, 28px radius, modal shadow, and header styles in separate classes.
+- The modal close buttons are 36px, below the 44px touch-target guideline above.
+- `.orb` in Voice mode uses a gradient despite the no-gradients rule above.

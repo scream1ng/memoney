@@ -1,18 +1,19 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { CatIcon } from '../components/ui'
+import { ReportExportSheet } from '../components/ReportExportSheet'
 import { category, useCustomCategories } from '../lib/categories'
 import { money, monthLabel, shiftMonth, shiftWeek, today, weekLabel, weekStart } from '../lib/format'
 import { currencyAtom, forMonth, forWeek, monthAtom, totals, useAtom, useTransactions } from '../lib/store'
 
-export function Stats() {
+export function Stats({ exportOpen, onCloseExport }: { exportOpen: boolean; onCloseExport: () => void }) {
   useCustomCategories()
   const all = useTransactions()
   const [month, setMonth] = useAtom(monthAtom)
   const [symbol] = useAtom(currencyAtom)
   const [period, setPeriod] = useState<'week' | 'month'>('month')
   const [week, setWeek] = useState(() => weekStart(today()))
-  const transactions = period === 'week' ? forWeek(all, week) : forMonth(all, month)
+  const transactions = useMemo(() => period === 'week' ? forWeek(all, week) : forMonth(all, month), [all, period, week, month])
   const { income, expense, balance } = totals(transactions)
   const incomeSums = new Map<string, number>()
   const expenseSums = new Map<string, number>()
@@ -78,6 +79,7 @@ export function Stats() {
       ) : (
         <div className="card stats-empty">No expenses this period</div>
       )}
+      {exportOpen && <ReportExportSheet label={period === 'week' ? weekLabel(week) : monthLabel(month)} filename={`MeMoney-${period}-${period === 'week' ? week : month}.pdf`} transactions={transactions} symbol={symbol} onClose={onCloseExport} />}
     </main>
   )
 }

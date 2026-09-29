@@ -1,4 +1,4 @@
-import { Camera, ChartPie, House, Mic, Paperclip, PenLine, Plus, Settings, Shield, type LucideIcon } from 'lucide-react'
+import { Camera, Download, House, Mic, Paperclip, PenLine, Plus, Settings, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { setCapture } from '../lib/capture'
@@ -18,7 +18,15 @@ export function CatIcon({ id, size = 22 }: { id: string; size?: number }) {
   )
 }
 
-export function Dock({ admin = false }: { admin?: boolean }) {
+function ReportBars({ size = 22 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <rect x="3" y="12" width="4" height="9" rx="1" />
+    <rect x="10" y="7" width="4" height="14" rx="1" />
+    <rect x="17" y="3" width="4" height="18" rx="1" />
+  </svg>
+}
+
+export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddCategory: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   // the menu belongs to the page it was opened on, so any navigation closes it
@@ -59,12 +67,14 @@ export function Dock({ admin = false }: { admin?: boolean }) {
   }
   const tabs = [
     { to: '/', icon: House, label: 'Home' },
-    { to: '/stats', icon: ChartPie, label: 'Stats' },
+    { to: '/stats', icon: ReportBars, label: 'Stats' },
     { to: '/settings', icon: Settings, label: 'Settings' },
-    ...(admin ? [{ to: '/admin', icon: Shield, label: 'Admin' }] : []),
   ]
+  const isHome = location.pathname === '/'
+  const isStats = location.pathname === '/stats'
+  const isCategories = location.pathname === '/settings/categories'
   return (
-    <nav className="dock">
+    <nav className={`dock${isHome || isStats || isCategories ? '' : ' no-fab'}`}>
       <div className="glass tabs">
         {tabs.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} end={to !== '/settings'} aria-label={label} onClick={() => setMenu(false)}>
@@ -72,10 +82,16 @@ export function Dock({ admin = false }: { admin?: boolean }) {
           </NavLink>
         ))}
       </div>
-      <button className={`glass fab ${menu ? 'open' : ''}`} aria-label={menu ? 'Close add menu' : 'Add'} aria-expanded={menu} onClick={() => setMenu(!menu)}>
-        <Plus size={28} strokeWidth={2.4} />
-      </button>
-      {menu && (
+      {isStats ? (
+        <button className="glass fab" aria-label="Export report" onClick={onExport}><Download size={26} strokeWidth={2.2} /></button>
+      ) : isHome ? (
+        <button className={`glass fab ${menu ? 'open' : ''}`} aria-label={menu ? 'Close add menu' : 'Add'} aria-expanded={menu} onClick={() => setMenu(!menu)}>
+          <Plus size={28} strokeWidth={2.4} />
+        </button>
+      ) : isCategories ? (
+        <button className="glass fab" aria-label="Add category" onClick={onAddCategory}><Plus size={28} strokeWidth={2.4} /></button>
+      ) : null}
+      {isHome && menu && (
         <>
           <div className="menu-shade" onClick={() => setMenu(false)} />
           <div className="quick-actions" role="menu">

@@ -190,6 +190,21 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .bar { height: 8px; border-radius: 4px; background: var(--fill); overflow: hidden; margin-top: 6px; }
 .bar i { display: block; height: 100%; border-radius: 4px; transition: width 0.4s; }
 
+.report-export-wrap { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.34); }
+.report-export-sheet { width: min(468px, calc(100% - 16px)); margin-bottom: calc(env(safe-area-inset-bottom) + 8px); padding: 12px 16px 22px; border-radius: 28px; background: var(--bg); box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.14); }
+.report-export-sheet .grab { margin: 0 auto 14px; }
+.report-export-head { display: flex; align-items: center; justify-content: center; min-height: 36px; margin-bottom: 14px; position: relative; }
+.report-export-head h2 { font-size: 17px; font-weight: 600; text-align: center; }
+.report-export-head button { position: absolute; right: 0; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--fill); }
+.report-export-options { overflow: hidden; }
+.report-export-options button { width: 100%; min-height: 68px; padding: 12px 16px; display: flex; align-items: center; gap: 14px; text-align: left; }
+.report-export-options button + button { border-top: 0.5px solid var(--sep); }
+.report-export-options button > svg { flex: none; color: var(--accent); }
+.report-export-options button strong, .report-export-options button small { display: block; }
+.report-export-options button small { margin-top: 3px; color: var(--muted); font-size: 13px; }
+.report-export-options button:disabled { opacity: 0.5; }
+.report-export-wait, .report-export-hint { padding: 14px 4px; font-size: 13px; text-align: center; }
+
 /* ---------- add sheet ---------- */
 .sheet-wrap {
   position: fixed; inset: 0; z-index: 30;
@@ -422,9 +437,18 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .set .val { color: var(--muted); display: flex; align-items: center; gap: 4px; }
 .set .danger { color: var(--exp); font-weight: 500; }
 .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; }
-.cur { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 0; }
-.cur button { min-width: 44px; height: 44px; padding: 0 12px; border-radius: 10px; background: var(--fill); font-weight: 600; }
-.cur button[aria-pressed='true'] { background: var(--accent); color: var(--accent-ink); }
+.currency-wrap { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.34); }
+.currency-sheet { width: min(468px, calc(100% - 16px)); max-height: calc(100dvh - env(safe-area-inset-top) - 12px); overflow-y: auto; margin-bottom: calc(env(safe-area-inset-bottom) + 8px); padding: 12px 16px 22px; border-radius: 28px; background: var(--bg); box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.14); }
+.currency-sheet .grab { margin: 0 auto 14px; }
+.currency-head { position: relative; display: flex; align-items: center; justify-content: center; min-height: 36px; margin-bottom: 14px; }
+.currency-head h2 { font-size: 17px; font-weight: 600; }
+.currency-head button { position: absolute; right: 0; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--fill); }
+.currency-options { overflow: hidden; }
+.currency-options button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 49px; padding: 0 16px; text-align: left; }
+.currency-options button + button { border-top: 0.5px solid var(--sep); }
+.currency-options strong { width: 42px; font-size: 18px; }
+.currency-options span { flex: 1; }
+.currency-options svg { color: var(--accent); }
 
 /* ---------- category management ---------- */
 .category-screen h1 { font-size: 30px; letter-spacing: -0.5px; }
@@ -435,14 +459,14 @@ body:has(.category-detail) .dock { display: none; }
 .category-type button { width: auto; padding: 0 18px; }
 .category-field-label { display: block; margin: 2px 4px -8px; color: var(--muted); font-size: 13px; font-weight: 600; }
 .category-list { overflow: hidden; }
+.category-empty { padding: 20px 16px; color: var(--muted); font-size: 14px; }
+.category-retry { display: block; margin-top: 10px; color: var(--accent); font-weight: 600; }
 .category-item { width: 100%; min-height: 64px; padding: 10px 16px; display: flex; align-items: center; gap: 12px; text-align: left; }
 .category-item + .category-item { border-top: 0.5px solid var(--sep); }
 .category-item .cat { width: 44px; height: 44px; border-radius: 14px; }
 .category-item > svg { margin-left: auto; color: var(--muted); flex: none; }
 .category-item-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .category-item-text strong { font-weight: 600; }
-.category-item.add { color: var(--accent); font-weight: 600; }
-.category-item.add .cat { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 .category-form { display: flex; flex-direction: column; gap: 16px; }
 .category-name, .category-preview { min-height: 76px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
 .category-name .cat, .category-preview .cat { width: 44px; height: 44px; border-radius: 14px; }
