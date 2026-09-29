@@ -71,6 +71,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 /* ---------- month header ---------- */
 .month h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; }
 .month .row { gap: 6px; }
+.month.week h1 { font-size: clamp(16px, 4.8vw, 22px); white-space: nowrap; }
 
 /* ---------- tab bar (floating pill + FAB) ---------- */
 .dock {
@@ -113,6 +114,9 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .io { display: flex; gap: 16px; margin-top: 4px; font-size: 15px; }
 .io .num.exp, .tx .num.exp { color: var(--ink); }
 .filter { align-self: flex-start; }
+.period-controls { gap: 8px; }
+.period-controls .filter button { width: 44px; }
+.period-toggle button { width: 64px; font-size: 13px; }
 .total { font-size: 34px; font-weight: 700; letter-spacing: -1px; }
 
 /* ---------- list: one inset-grouped card per day ---------- */
@@ -123,7 +127,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .tx:active { background: #e5e5ea; }
 /* swipe left to reveal Delete; the slot carries the group's rounded corners */
 .swipe { position: relative; overflow: hidden; background: var(--card); }
-.swipe.revealed { background: var(--exp); }
+.swipe.revealed { background: var(--card); }
 .day + .swipe { border-radius: 16px 16px 0 0; }
 .swipe:last-child { border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
 .day + .swipe:last-child { border-radius: 16px; }
@@ -131,9 +135,8 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .swipe .tx { z-index: 1; touch-action: pan-y; transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1); }
 .swipe.revealed .tx { box-shadow: 1px 0 0 var(--sep); }
 .swipe-delete {
-  position: absolute; inset: 0 0 0 auto; width: 86px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  color: #fff; font-size: 14px; font-weight: 600;
+  position: absolute; top: 6px; right: 8px; bottom: 6px; width: 80px;
+  border-radius: 16px; background: var(--exp); color: #fff; font-size: 15px; font-weight: 600;
 }
 .undo {
   position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 90px); z-index: 21;
@@ -434,9 +437,8 @@ body:has(.category-detail) .dock { display: none; }
 .category-choices button { width: 44px; height: 44px; border-radius: 14px; background: var(--card); display: grid; place-items: center; color: var(--muted); }
 .category-choices button[aria-pressed='true'] { box-shadow: 0 0 0 2.5px var(--bg), 0 0 0 5px var(--accent); color: var(--accent); }
 .category-choices.colors button[aria-pressed='true'] { color: var(--card); }
-.category-extra { display: grid; gap: 10px; }
-.category-extra label { margin: 0 4px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.category-clues { width: 100%; min-height: 108px; border: 0; border-radius: 16px; padding: 14px 16px; background: var(--card); color: var(--ink); font: inherit; font-size: 16px; resize: vertical; }
+.category-choices.colors { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.category-choices.colors button { width: 100%; max-width: 44px; height: auto; aspect-ratio: 1; }
 .category-delete { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--exp); }
 .category-swipe { position: relative; overflow: hidden; background: var(--card); }
 .category-swipe + .category-swipe, .category-swipe + .category-item { border-top: 0.5px solid var(--sep); }
@@ -444,8 +446,10 @@ body:has(.category-detail) .dock { display: none; }
 .category-swipe-delete { position: absolute; top: 6px; right: 8px; bottom: 6px; width: 80px; border-radius: 16px; background: var(--exp); color: #fff; font-size: 15px; font-weight: 600; }
 
 
-@media (max-width: 350px) {
+@media (max-width: 371px) {
   .catrow .cat { width: 44px; height: 44px; }
+  .category-choices.colors { display: flex; flex-wrap: wrap; justify-content: center; max-width: 248px; margin-inline: auto; gap: 12px 20px; }
+  .category-choices.colors button { width: 44px; height: 44px; flex: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

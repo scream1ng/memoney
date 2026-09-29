@@ -93,6 +93,39 @@ describe('camera and voice API', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).input[0].content).toEqual([{ type: 'input_text', text: 'กาแฟ 145 บาท' }])
   })
 
+  it('honors an explicit spoken category over the AI guess', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ text: 'จ่ายค่าไฟ 500 บาท ให้ลงหมวด Transport' }))
+      .mockResolvedValueOnce(completion({ ...expense, amount: 50000, category: 'bills' }))
+    const app = parseRoutes(async () => 'user', origin)
+    const response = await app.request('/', upload('audio', 'audio/webm', 'audio'))
+    expect((await response.json() as { category?: string }).category).toBe('transport')
+  })
+
+  it('recognizes a Thai transcription of Transport', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ text: 'จ่ายค่าไฟ 500 บาท ให้ลงหมวดทรานสปอร์ต' }))
+      .mockResolvedValueOnce(completion({ ...expense, amount: 50000, category: 'bills' }))
+    const app = parseRoutes(async () => 'user', origin)
+    const response = await app.request('/', upload('audio', 'audio/webm', 'audio'))
+    expect((await response.json() as { category?: string }).category).toBe('transport')
+  })
+
+  it('keeps the AI guess when no category command was spoken', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ text: 'จ่ายค่าไฟ 500 บาท' }))
+      .mockResolvedValueOnce(completion({ ...expense, amount: 50000, category: 'bills' }))
+    const app = parseRoutes(async () => 'user', origin)
+    const response = await app.request('/', upload('audio', 'audio/webm', 'audio'))
+    expect((await response.json() as { category?: string }).category).toBe('bills')
+  })
+
+  it('honors a spoken custom category name', async () => {
+    const custom = [{ id: 'salary-b', type: 'income' as const, label: 'Salary · B', icon: 'briefcase', color: '#248a3d', clues: '' }]
+    fetchMock.mockResolvedValueOnce(Response.json({ text: 'ได้เงิน 420 บาท ลงหมวด Salary · B' }))
+      .mockResolvedValueOnce(completion({ type: 'income', amount: 42000, category: 'salary', date: null, note: null, merchant: null }))
+    const app = parseRoutes(async () => 'user', origin, undefined, async () => custom)
+    const response = await app.request('/', upload('audio', 'audio/webm', 'audio'))
+    expect((await response.json() as { category?: string }).category).toBe('salary-b')
+  })
+
   it.each([['image', 'text/html'], ['audio', 'image/jpeg'], ['other', 'image/jpeg']])('rejects %s with %s', async (kind, mime) => {
     const app = parseRoutes(async () => 'user', origin)
     expect((await app.request('/', upload(kind, mime))).status).toBe(415)
