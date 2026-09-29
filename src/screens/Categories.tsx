@@ -1,4 +1,4 @@
-import { ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { ACTIVE_CATEGORIES, COLORS, ICONS, categoryRepo, useCustomCategories } from '../lib/categories'
 import type { CustomCategory, TxType } from '../lib/types'
@@ -7,8 +7,9 @@ type Draft = Omit<CustomCategory, 'id'> & { id?: string }
 const REVEAL = 96
 const COLOR_NAMES = ['Green', 'Amber', 'Indigo', 'Blue', 'Orange', 'Pink', 'Purple']
 
-export function Categories() {
+export function Categories({ addRequest }: { addRequest: number }) {
   const custom = useCustomCategories()
+  const handledRequest = useRef(addRequest)
   const [type, setType] = useState<TxType>('expense')
   const [draft, setDraft] = useState<Draft>()
   const [choice, setChoice] = useState<Draft>()
@@ -18,13 +19,16 @@ export function Categories() {
   const [deleteReady, setDeleteReady] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const customForType = custom.filter((c) => c.type === type)
 
   useEffect(() => {
     let active = true
-    categoryRepo.load().catch(() => active && setError('Could not load categories. Try reopening this page.'))
+    categoryRepo.load().catch(() => active && setLoadError(true))
       .finally(() => active && setLoading(false))
     return () => { active = false }
-  }, [])
+  }, [loadAttempt])
 
   function open(next: Draft) {
     setDraft(next)
@@ -36,6 +40,12 @@ export function Categories() {
   }
 
   function close() { setDraft(undefined); setChoice(undefined); setDeleteReady(false); setError('') }
+
+  useEffect(() => {
+    if (addRequest === handledRequest.current) return
+    handledRequest.current = addRequest
+    open({ type, label: '', icon: type === 'income' ? 'briefcase' : 'bag', color: type === 'income' ? COLORS[0] : COLORS[3], clues: '' })
+  }, [addRequest, type])
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
@@ -120,9 +130,10 @@ export function Categories() {
           </section>
           <div className="category-field-label">YOUR CATEGORIES</div>
           <section className="card category-list">
-            {custom.filter((c) => c.type === type).map((c) => <CategoryRow key={c.id} item={c} open={openId === c.id} pending={pending} onOpen={(shown) => setOpenId(shown ? c.id : undefined)} onEdit={() => open(c)} onDelete={() => void remove(c.id)} />)}
+            {customForType.map((c) => <CategoryRow key={c.id} item={c} open={openId === c.id} pending={pending} onOpen={(shown) => setOpenId(shown ? c.id : undefined)} onEdit={() => open(c)} onDelete={() => void remove(c.id)} />)}
             {loading && <div className="category-item muted">Loading…</div>}
-            <button className="category-item add" onClick={() => open({ type, label: '', icon: type === 'income' ? 'briefcase' : 'bag', color: type === 'income' ? COLORS[0] : COLORS[3], clues: '' })}><span className="cat"><Plus size={22} /></span>Add category</button>
+            {!loading && loadError && <div className="category-empty">Could not load your categories.<button className="category-retry" onClick={() => { setLoading(true); setLoadError(false); setLoadAttempt((n) => n + 1) }}>Try again</button></div>}
+            {!loading && !loadError && customForType.length === 0 && <div className="category-empty">No custom {type} categories yet. Tap + to add one.</div>}
           </section>
         </>
       )}

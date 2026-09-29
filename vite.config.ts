@@ -10,7 +10,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: { navigateFallbackDenylist: [/^\/api\//] },
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'fonts/NotoSansThai.ttf'],
       manifest: {
         name: 'MeMoney',
         short_name: 'MeMoney',
