@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TypeToggle } from '../components/ui'
 import { clearCapture, peekCapture, type Capture } from '../lib/capture'
-import { CATEGORIES, categories, category, categoryRepo, useCategories, useCustomCategories } from '../lib/categories'
+import { ACTIVE_CATEGORIES, CATEGORIES, categories, category, categoryRepo, useCategories, useCustomCategories } from '../lib/categories'
 import { toJpeg } from '../lib/image'
 import { amountToInput, dayLabel, money, parseAmount, today, uid } from '../lib/format'
 import { parse, type Guess } from '../lib/parse'
@@ -99,8 +99,10 @@ function Sheet() {
 
   const top = useMemo(() => {
     const count = new Map<string, number>()
+    const order = new Map(ACTIVE_CATEGORIES[type].map((c, i) => [c.id, i]))
     for (const t of all) if (t.type === type) count.set(t.category, (count.get(t.category) ?? 0) + 1)
-    return [...allCats].sort((a, b) => (count.get(b.id) ?? 0) - (count.get(a.id) ?? 0)).slice(0, 4)
+    return allCats.filter((c) => !CATEGORIES[type].some((builtIn) => builtIn.id === c.id) || ACTIVE_CATEGORIES[type].some((active) => active.id === c.id))
+      .sort((a, b) => (count.get(b.id) ?? 0) - (count.get(a.id) ?? 0) || (order.get(a.id) ?? -1) - (order.get(b.id) ?? -1)).slice(0, 4)
   }, [all, allCats, type])
   const shown = extra && !top.some((c) => c.id === extra) && allCats.some((c) => c.id === extra)
     ? [...top.slice(0, 3), category(extra)]
@@ -399,8 +401,17 @@ function Sheet() {
       {shownAmount}
     </div>
   )
+  const legacyCat = cat && CATEGORIES[type].some((c) => c.id === cat) && !ACTIVE_CATEGORIES[type].some((c) => c.id === cat) ? category(cat) : undefined
+  const LegacyIcon = legacyCat?.icon
   const catSheet = sub === 'cats' && (
     <SubSheet label="Category" onClose={() => setSub(undefined)}>
+      {legacyCat && LegacyIcon && <>
+        <div className="category-field-label">CURRENT CATEGORY</div>
+        <div className="card category-list"><button className="category-item" aria-pressed="true" onClick={() => pick(legacyCat.id)}>
+          <span className="cat" style={{ background: legacyCat.color }}><LegacyIcon size={22} /></span>{legacyCat.label}
+          <Check size={18} className="chev" />
+        </button></div>
+      </>}
       {!!customCats.length && <>
         <div className="category-field-label">YOUR CATEGORIES</div>
         <div className="card category-list">
@@ -415,7 +426,7 @@ function Sheet() {
       </>}
       <div className="category-field-label">BUILT IN</div>
       <div className="cats" role="group" aria-label="Category">
-        {CATEGORIES[type].map((c) => (
+        {ACTIVE_CATEGORIES[type].map((c) => (
           <button key={c.id} aria-pressed={cat === c.id} onClick={() => pick(c.id)}>
             <span className="cat" style={{ background: c.color }}><c.icon size={24} /></span>
             <span className="lbl">{c.label}</span>

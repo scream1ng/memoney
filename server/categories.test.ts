@@ -60,6 +60,12 @@ describe('custom category API', () => {
     expect((await post({ ...income, label: 'salary · b' })).status).toBe(409)
   })
 
+  it('allows a custom replacement for a hidden built-in name', async () => {
+    const { post } = setup()
+    expect((await post({ ...income, type: 'expense', label: 'Work travel' })).status).toBe(201)
+    expect((await post({ ...income, type: 'expense', label: 'Food' })).status).toBe(409)
+  })
+
   it('cannot edit or delete another user’s category', async () => {
     const { app, post } = setup()
     const created = await (await post(income)).json() as CustomCategory
