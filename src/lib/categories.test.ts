@@ -2,6 +2,14 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules() })
 
+it('offers a small default set while keeping legacy categories readable', async () => {
+  const { ACTIVE_CATEGORIES, category } = await import('./categories.ts')
+  expect(ACTIVE_CATEGORIES.expense.map((c) => c.id)).toEqual(['food', 'shopping', 'bills', 'transport', 'other'])
+  expect(ACTIVE_CATEGORIES.income.map((c) => c.id)).toEqual(['salary', 'gift', 'invest'])
+  expect(category('work-travel').label).toBe('Work travel')
+  expect(category('other-in').label).toBe('Other')
+})
+
 it('keeps category order after editing an earlier category', async () => {
   const a = { id: 'a', type: 'income' as const, label: 'Salary · A', icon: 'briefcase', color: '#248a3d', clues: 'Acme' }
   const b = { ...a, id: 'b', label: 'Salary · B', clues: 'Beta' }

@@ -61,6 +61,8 @@ describe('camera and voice API', () => {
     expect(sent.instructions).toContain('2026-09-28')
     expect(sent.input[0].content[1]).toEqual({ type: 'input_image', image_url: 'data:image/jpeg;base64,cGhvdG8=', detail: 'high' })
     expect(sent.text.format.strict).toBe(true)
+    expect(sent.text.format.schema.properties.category.enum).not.toContain('work-travel')
+    expect(sent.text.format.schema.properties.category.enum).not.toContain('other-in')
   })
 
   it('offers the user’s salary sources to AI and keeps its choice in category', async () => {

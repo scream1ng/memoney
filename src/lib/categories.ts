@@ -43,6 +43,12 @@ export const CATEGORIES: Record<TxType, Category[]> = {
   ],
 }
 
+// Keep legacy IDs in CATEGORIES so saved entries still render and validate.
+export const ACTIVE_CATEGORIES: Record<TxType, Category[]> = {
+  expense: ['food', 'shopping', 'bills', 'transport', 'other'].map((id) => CATEGORIES.expense.find((c) => c.id === id)!),
+  income: ['salary', 'gift', 'invest'].map((id) => CATEGORIES.income.find((c) => c.id === id)!),
+}
+
 const ALL = [...CATEGORIES.expense, ...CATEGORIES.income]
 
 let custom: CustomCategory[] = []

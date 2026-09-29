@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type pg from 'pg'
-import { CATEGORIES, COLORS, ICONS } from '../src/lib/categories.ts'
+import { ACTIVE_CATEGORIES, CATEGORIES, COLORS, ICONS } from '../src/lib/categories.ts'
 import type { CustomCategory, Tx, TxType } from '../src/lib/types.ts'
 
 type Input = Omit<CustomCategory, 'id'>
@@ -132,7 +132,7 @@ export function categoryRoutes(store: CategoryStore, getUserId: (r: Request) => 
     if (!data) return c.json({ error: 'Invalid category.' }, 400)
     const existing = await store.list(c.get('userId'))
     if (existing.length >= 50) return c.json({ error: 'Category limit reached.' }, 400)
-    if ([...existing.filter((x) => x.type === data.type), ...CATEGORIES[data.type]].some((x) => x.label.toLowerCase() === data.label.toLowerCase()))
+    if ([...existing.filter((x) => x.type === data.type), ...ACTIVE_CATEGORIES[data.type]].some((x) => x.label.toLowerCase() === data.label.toLowerCase()))
       return c.json({ error: 'This category name already exists.' }, 409)
     const result = await store.create(c.get('userId'), data)
     return result === 'duplicate' ? c.json({ error: 'This category name already exists.' }, 409) : c.json(result, 201)
@@ -140,7 +140,7 @@ export function categoryRoutes(store: CategoryStore, getUserId: (r: Request) => 
   app.put('/:id', async (c) => {
     const data = input(await c.req.json().catch(() => undefined))
     if (!data) return c.json({ error: 'Invalid category.' }, 400)
-    if (CATEGORIES[data.type].some((x) => x.label.toLowerCase() === data.label.toLowerCase())) return c.json({ error: 'This category name already exists.' }, 409)
+    if (ACTIVE_CATEGORIES[data.type].some((x) => x.label.toLowerCase() === data.label.toLowerCase())) return c.json({ error: 'This category name already exists.' }, 409)
     const result = await store.update(c.get('userId'), c.req.param('id'), data)
     if (result === 'missing') return c.json({ error: 'Category not found.' }, 404)
     if (result === 'duplicate') return c.json({ error: 'This category name already exists.' }, 409)

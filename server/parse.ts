@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { CATEGORIES } from '../src/lib/categories.ts'
+import { ACTIVE_CATEGORIES } from '../src/lib/categories.ts'
 import type { UsageRecorder } from './usage.ts'
 import type { CustomCategory, Guess, TxType } from '../src/lib/types.ts'
 
@@ -85,12 +85,12 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
     try { custom = await getCustomCategories(c.get('userId')) }
     catch { return c.json({ error: 'Couldn’t load categories. Try again.' }, 503) }
     const allowed: Record<TxType, Set<string>> = {
-      expense: new Set([...CATEGORIES.expense.map((cat) => cat.id), ...custom.filter((cat) => cat.type === 'expense').map((cat) => cat.id)]),
-      income: new Set([...CATEGORIES.income.map((cat) => cat.id), ...custom.filter((cat) => cat.type === 'income').map((cat) => cat.id)]),
+      expense: new Set([...ACTIVE_CATEGORIES.expense.map((cat) => cat.id), ...custom.filter((cat) => cat.type === 'expense').map((cat) => cat.id)]),
+      income: new Set([...ACTIVE_CATEGORIES.income.map((cat) => cat.id), ...custom.filter((cat) => cat.type === 'income').map((cat) => cat.id)]),
     }
     const schemaProperties = properties([...allowed.expense, ...allowed.income])
     const categoryOptions = Object.fromEntries((['expense', 'income'] as const).map((type) => [type, [
-      ...CATEGORIES[type].map(({ id, label }) => ({ id, label })),
+      ...ACTIVE_CATEGORIES[type].map(({ id, label }) => ({ id, label })),
       ...custom.filter((cat) => cat.type === type).map(({ id, label, clues }) => ({ id, label, clues })),
     ]]))
     const headers = { Authorization: `Bearer ${key}` }
