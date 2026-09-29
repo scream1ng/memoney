@@ -166,6 +166,26 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .seg button[aria-pressed='true'].n { color: var(--ink); }
 
 /* ---------- stats ---------- */
+.stats-summary { padding: 18px 16px; display: grid; gap: 12px; }
+.stats-summary-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stats-summary-headline { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.stats-summary-kicker { color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: .03em; }
+.stats-summary-amount { font-size: clamp(26px, 8vw, 34px); font-weight: 700; letter-spacing: -1px; overflow-wrap: anywhere; }
+.stats-income-bar { height: 12px; border-radius: 6px; background: var(--fill); overflow: hidden; display: flex; }
+.stats-income-bar span { height: 100%; flex: none; }
+.stats-income-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stats-income-legend-item { min-width: 0; display: grid; gap: 2px; font-size: 12px; }
+.stats-income-legend-name { min-width: 0; display: flex; align-items: center; gap: 5px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.stats-income-legend-name i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.stats-income-legend-item .num { font-size: 13px; overflow-wrap: anywhere; }
+.stats-income-legend-item small, .stats-summary-metrics small { color: var(--muted); }
+.stats-income-empty { font-size: 13px; }
+.stats-summary-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stats-summary-metrics > div { min-width: 0; display: grid; gap: 4px; font-size: 13px; }
+.stats-summary-metrics > div + div { border-left: .5px solid var(--sep); padding-left: 16px; }
+.stats-summary-metrics .num { font-size: 20px; overflow-wrap: anywhere; }
+.stats-breakdown-title { font-size: 17px; }
+.stats-empty { padding: 16px; color: var(--muted); font-size: 14px; }
 .bars { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
 .bar { height: 8px; border-radius: 4px; background: var(--fill); overflow: hidden; margin-top: 6px; }
 .bar i { display: block; height: 100%; border-radius: 4px; transition: width 0.4s; }
@@ -450,6 +470,7 @@ body:has(.category-detail) .dock { display: none; }
   .catrow .cat { width: 44px; height: 44px; }
   .category-choices.colors { display: flex; flex-wrap: wrap; justify-content: center; max-width: 248px; margin-inline: auto; gap: 12px 20px; }
   .category-choices.colors button { width: 44px; height: 44px; flex: none; }
+  .stats-income-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
