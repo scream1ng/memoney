@@ -63,6 +63,21 @@ describe('camera and voice API', () => {
     expect(sent.text.format.strict).toBe(true)
   })
 
+  it('offers the user’s salary sources to AI and keeps its choice in category', async () => {
+    const sources = [
+      { id: 'salary-a', type: 'income' as const, label: 'Salary · A', icon: 'briefcase', color: '#248a3d', clues: 'A Payroll' },
+      { id: 'salary-b', type: 'income' as const, label: 'Salary · B', icon: 'briefcase', color: '#248a3d', clues: 'B Payroll' },
+    ]
+    fetchMock.mockResolvedValueOnce(completion({ type: 'income', amount: 42000, category: 'salary-b', date: '2026-09-28', note: null, merchant: 'B Payroll' }))
+    const app = parseRoutes(async () => 'user', origin, undefined, async () => sources)
+    const response = await app.request('/', upload())
+    expect(await response.json()).toEqual({ type: 'income', amount: 42000, category: 'salary-b', date: '2026-09-28', merchant: 'B Payroll' })
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(sent.instructions).toContain('B Payroll')
+    expect(sent.instructions).toContain('Put that id in category, not only in note')
+    expect(sent.text.format.schema.properties.category.enum).toContain('salary-b')
+  })
+
   it.each([['audio/webm;codecs=opus', 'webm'], ['audio/mp4', 'mp4']])('transcribes %s before extracting an expense', async (mime, extension) => {
     fetchMock.mockResolvedValueOnce(Response.json({ text: 'กาแฟ 145 บาท' })).mockResolvedValueOnce(completion())
     const app = parseRoutes(async () => 'user', origin)

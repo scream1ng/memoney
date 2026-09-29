@@ -2,12 +2,13 @@ import { Camera, ChartPie, ChevronLeft, ChevronRight, House, Mic, Paperclip, Pen
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { setCapture } from '../lib/capture'
-import { category } from '../lib/categories'
+import { category, useCustomCategories } from '../lib/categories'
 import { dayLabel, money, monthLabel, shiftMonth } from '../lib/format'
 import { currencyAtom, monthAtom, useAtom } from '../lib/store'
 import type { Tx, TxType } from '../lib/types'
 
 export function CatIcon({ id, size = 22 }: { id: string; size?: number }) {
+  useCustomCategories()
   const c = category(id)
   const Icon = c.icon
   return (
@@ -83,7 +84,7 @@ export function Dock({ admin = false }: { admin?: boolean }) {
     <nav className="dock">
       <div className="glass tabs">
         {tabs.map(({ to, icon: Icon, label }) => (
-          <NavLink key={to} to={to} end aria-label={label} onClick={() => setMenu(false)}>
+          <NavLink key={to} to={to} end={to !== '/settings'} aria-label={label} onClick={() => setMenu(false)}>
             <Icon size={22} />
           </NavLink>
         ))}
@@ -124,6 +125,7 @@ export function Amount({ tx }: { tx: Pick<Tx, 'type' | 'amount'> }) {
 const REVEAL = 86
 
 export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => void }) {
+  useCustomCategories()
   const navigate = useNavigate()
   const location = useLocation()
   // only one row stays open; deleting needs a tap on Delete, never just a long swipe
