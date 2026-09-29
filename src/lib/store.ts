@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { Tx } from './types'
-import { monthKey, today } from './format'
+import { monthKey, shiftWeek, today } from './format'
 
 export interface TxRepo {
   list(): Tx[]
@@ -87,6 +87,11 @@ export function useTransactions(): Tx[] {
 
 export function forMonth(txs: Tx[], month: string): Tx[] {
   return txs.filter((t) => monthKey(t.date) === month).sort(byNewest)
+}
+
+export function forWeek(txs: Tx[], week: string): Tx[] {
+  const end = shiftWeek(week, 1)
+  return txs.filter((t) => t.date >= week && t.date < end).sort(byNewest)
 }
 
 export function totals(txs: Tx[]) {

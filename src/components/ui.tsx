@@ -1,4 +1,4 @@
-import { Camera, ChartPie, ChevronLeft, ChevronRight, House, Mic, Paperclip, PenLine, Plus, Settings, Shield, Trash2, type LucideIcon } from 'lucide-react'
+import { Camera, ChartPie, ChevronLeft, ChevronRight, House, Mic, Paperclip, PenLine, Plus, Settings, Shield, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { setCapture } from '../lib/capture'
@@ -122,7 +122,7 @@ export function Amount({ tx }: { tx: Pick<Tx, 'type' | 'amount'> }) {
   return <span className={`num ${tx.type === 'income' ? 'inc' : 'exp'}`}>{sign}{money(tx.amount, symbol)}</span>
 }
 
-const REVEAL = 86
+const REVEAL = 96
 
 export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => void }) {
   useCustomCategories()
@@ -171,7 +171,7 @@ function SwipeRow({ open, onOpen, onDelete, onTap, label, children }: {
   return (
     <div className={`swipe ${open || (dx ?? 0) < 0 ? 'revealed' : ''}`}>
       <button className="swipe-delete" aria-label={`Delete ${label}`} tabIndex={open ? 0 : -1} onClick={onDelete}>
-        <Trash2 size={20} />Delete
+        Delete
       </button>
       <button
         className="row tx"

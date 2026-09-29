@@ -26,6 +26,25 @@ export function monthLabel(month: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
 }
 
+export function weekStart(dateKey: string): string {
+  const date = fromDateKey(dateKey)
+  date.setDate(date.getDate() - (date.getDay() + 6) % 7)
+  return toDateKey(date)
+}
+
+export function shiftWeek(week: string, delta: number): string {
+  const date = fromDateKey(week)
+  date.setDate(date.getDate() + delta * 7)
+  return toDateKey(date)
+}
+
+export function weekLabel(week: string): string {
+  const end = fromDateKey(shiftWeek(week, 1))
+  end.setDate(end.getDate() - 1)
+  const start = fromDateKey(week).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  return `${start} – ${end.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
+}
+
 export function dayLabel(dateKey: string): string {
   if (dateKey === today()) return 'Today'
   const y = new Date()

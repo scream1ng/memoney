@@ -37,6 +37,20 @@ function validate(value: unknown, allowed: Record<TxType, Set<string>>): Guess {
   return result
 }
 
+function spokenCategory(heard: string, type: TxType, custom: CustomCategory[]): string | undefined {
+  const options = [...ACTIVE_CATEGORIES[type], ...custom.filter((cat) => cat.type === type)]
+    .flatMap((cat) => [cat.label, ...(cat.id === 'transport' ? ['ทรานสปอร์ต'] : [])].map((name) => ({ id: cat.id, name })))
+    .sort((a, b) => b.name.length - a.name.length)
+  let chosen: string | undefined
+  for (const match of heard.matchAll(/(?:หมวด(?:หมู่)?|category|ลง(?:ใน)?(?:หมวด(?:หมู่)?)?|จัดเป็น)\s*[:：]?\s*/giu)) {
+    const rest = heard.slice(match.index + match[0].length).trimStart().toLocaleLowerCase()
+    const found = options.find(({ name }) => rest.startsWith(name.toLocaleLowerCase()) &&
+      (!/[a-z0-9]$/i.test(name) || !/[a-z0-9]/i.test(rest[name.length] ?? '')))
+    if (found) chosen = found.id
+  }
+  return chosen
+}
+
 export function parseRoutes(getUserId: (request: Request) => Promise<string | undefined>, origin: string, record?: UsageRecorder,
   getCustomCategories: (userId: string) => Promise<CustomCategory[]> = async () => []) {
   const app = new Hono<{ Variables: { userId: string } }>()
@@ -128,7 +142,7 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
 Today in the user's timezone is ${today}. Their currency symbol is ${JSON.stringify(currency)}. Do not convert currencies.
 Understand Thai and English. Convert Buddhist-era years to Gregorian. Resolve spoken relative dates against today. Leave unstated dates null.
 Use the receipt's final total, not cash tendered, change, tax or subtotal. Amount is integer minor units (145 baht = 14500).
-Use expense for purchases, income for money received. Choose a category only when supported by the content. For multiple salary sources, use the payer name or matching clues to select the specific custom category id. Put that id in category, not only in note.
+Use expense for purchases, income for money received. If the speaker explicitly names an available category, use it even when the purchase would usually fit another category. Otherwise choose a category only when supported by the content. For multiple salary sources, use the payer name or matching clues to select the specific custom category id. Put that id in category, not only in note.
 Categories: ${JSON.stringify(categoryOptions)}.
 Return null for missing or uncertain fields, including category when the source cannot be distinguished. Unrelated content must return all null fields. Note is only for extra detail. Keep note and merchant under 80 characters; preserve the original language.`,
           input: [{ role: 'user', content }],
@@ -141,6 +155,7 @@ Return null for missing or uncertain fields, including category when the source 
       const text = output.output?.filter((item) => item.type === 'message').flatMap((item) => item.content ?? [])
         .filter((item) => item.type === 'output_text').map((item) => item.text ?? '').join('')
       const result = validate(JSON.parse(text ?? ''), allowed)
+      if (heard && result.type) result.category = spokenCategory(heard, result.type, custom) ?? result.category
       if (!result.amount && !result.category && !result.date && !result.merchant) return c.json({ error: 'No expense or income found. Try again or type your entry.' }, 422)
       return c.json({ ...result, ...(heard ? { heard } : {}) })
     } catch {

@@ -12,6 +12,7 @@ export function Categories() {
   const [type, setType] = useState<TxType>('expense')
   const [draft, setDraft] = useState<Draft>()
   const [choice, setChoice] = useState<Draft>()
+  const [focusName, setFocusName] = useState(false)
   const [openId, setOpenId] = useState<string>()
   const [pending, setPending] = useState(false)
   const [deleteReady, setDeleteReady] = useState(false)
@@ -28,6 +29,7 @@ export function Categories() {
   function open(next: Draft) {
     setDraft(next)
     setChoice(undefined)
+    setFocusName(true)
     setOpenId(undefined)
     setDeleteReady(false)
     setError('')
@@ -83,10 +85,6 @@ export function Categories() {
           <div className="category-choices colors" role="group" aria-label="Color">
             {COLORS.map((color, i) => <button type="button" key={color} aria-label={COLOR_NAMES[i]} aria-pressed={choice.color === color} style={{ background: color }} onClick={() => setChoice({ ...choice, color })} />)}
           </div>
-          <div className="category-extra">
-            <label htmlFor="category-clues">HELP AI RECOGNIZE IT · OPTIONAL</label>
-            <textarea id="category-clues" className="category-clues" value={choice.clues} maxLength={200} placeholder="Names or words associated with this category" onChange={(e) => setChoice({ ...choice, clues: e.target.value })} />
-          </div>
           <div className="category-actions">
             <button className="glass category-secondary" onClick={() => setChoice(undefined)}>Back</button>
             <button className="glass review-save category-primary" onClick={() => { setDraft(choice); setChoice(undefined) }}>Apply</button>
@@ -98,8 +96,8 @@ export function Categories() {
           <h1>{draft.id ? 'Edit category' : 'New category'}</h1>
           <form className="category-form" onSubmit={save}>
             <div className="category-field-label">NAME</div>
-            <label className="card category-name"><span className="cat" style={{ background: draft.color }}>{renderIcon(draft.icon)}</span><input value={draft.label} maxLength={40} placeholder="Category name" aria-label="Category name" autoFocus disabled={pending} onChange={(e) => { setDraft({ ...draft, label: e.target.value }); setError('') }} /></label>
-            <section className="card category-list"><button className="category-item" type="button" disabled={pending} onClick={() => setChoice({ ...draft })}>Icon &amp; color<ChevronRight size={18} /></button></section>
+            <label className="card category-name"><span className="cat" style={{ background: draft.color }}>{renderIcon(draft.icon)}</span><input value={draft.label} maxLength={40} placeholder="Category name" aria-label="Category name" autoFocus={focusName} disabled={pending} onChange={(e) => { setDraft({ ...draft, label: e.target.value }); setError('') }} /></label>
+            <section className="card category-list"><button className="category-item" type="button" disabled={pending} onClick={() => { setFocusName(false); setChoice({ ...draft }) }}>Icon &amp; color<ChevronRight size={18} /></button></section>
             {error && <div className="warn" role="alert">{error}</div>}
             {draft.id && <button className="category-delete" type="button" disabled={pending} onClick={() => deleteReady ? void remove(draft.id!) : setDeleteReady(true)}><Trash2 size={18} />{deleteReady ? 'Confirm delete' : 'Delete category'}</button>}
             <div className="category-actions">
@@ -116,15 +114,15 @@ export function Categories() {
             <button className="i" aria-pressed={type === 'income'} onClick={() => { setType('income'); setOpenId(undefined) }}>Income</button>
           </div>
           {error && <div className="warn" role="alert">{error}</div>}
+          <div className="category-field-label">BUILT IN</div>
+          <section className="card category-list">
+            {ACTIVE_CATEGORIES[type].map((c) => <div className="category-item" key={c.id}><span className="cat" style={{ background: c.color }}><c.icon size={22} /></span><span>{c.label}</span></div>)}
+          </section>
           <div className="category-field-label">YOUR CATEGORIES</div>
           <section className="card category-list">
             {custom.filter((c) => c.type === type).map((c) => <CategoryRow key={c.id} item={c} open={openId === c.id} pending={pending} onOpen={(shown) => setOpenId(shown ? c.id : undefined)} onEdit={() => open(c)} onDelete={() => void remove(c.id)} />)}
             {loading && <div className="category-item muted">Loading…</div>}
             <button className="category-item add" onClick={() => open({ type, label: '', icon: type === 'income' ? 'briefcase' : 'bag', color: type === 'income' ? COLORS[0] : COLORS[3], clues: '' })}><span className="cat"><Plus size={22} /></span>Add category</button>
-          </section>
-          <div className="category-field-label">BUILT IN</div>
-          <section className="card category-list">
-            {ACTIVE_CATEGORIES[type].map((c) => <div className="category-item" key={c.id}><span className="cat" style={{ background: c.color }}><c.icon size={22} /></span><span>{c.label}</span></div>)}
           </section>
         </>
       )}
