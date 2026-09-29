@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TypeToggle } from '../components/ui'
 import { clearCapture, peekCapture, type Capture } from '../lib/capture'
-import { CATEGORIES, category } from '../lib/categories'
+import { CATEGORIES, categories, category, categoryRepo, useCategories, useCustomCategories } from '../lib/categories'
 import { toJpeg } from '../lib/image'
 import { amountToInput, dayLabel, money, parseAmount, today, uid } from '../lib/format'
 import { parse, type Guess } from '../lib/parse'
@@ -52,6 +52,8 @@ function Sheet() {
   const orbRef = useRef<HTMLDivElement>(null)
 
   const [type, setType] = useState<TxType>(existing?.type ?? 'expense')
+  const allCats = useCategories(type)
+  const customCats = useCustomCategories().filter((c) => c.type === type)
   const [input, setInput] = useState(existing ? amountToInput(existing.amount) : '')
   const [cat, setCat] = useState<string | undefined>(existing?.category)
   const [date, setDate] = useState(existing?.date ?? today())
@@ -98,9 +100,9 @@ function Sheet() {
   const top = useMemo(() => {
     const count = new Map<string, number>()
     for (const t of all) if (t.type === type) count.set(t.category, (count.get(t.category) ?? 0) + 1)
-    return [...CATEGORIES[type]].sort((a, b) => (count.get(b.id) ?? 0) - (count.get(a.id) ?? 0)).slice(0, 4)
-  }, [all, type])
-  const shown = extra && !top.some((c) => c.id === extra) && CATEGORIES[type].some((c) => c.id === extra)
+    return [...allCats].sort((a, b) => (count.get(b.id) ?? 0) - (count.get(a.id) ?? 0)).slice(0, 4)
+  }, [all, allCats, type])
+  const shown = extra && !top.some((c) => c.id === extra) && allCats.some((c) => c.id === extra)
     ? [...top.slice(0, 3), category(extra)]
     : top
 
@@ -175,7 +177,7 @@ function Sheet() {
   function switchType(t: TxType) {
     setType(t)
     unhint('type')
-    if (!CATEGORIES[t].some((c) => c.id === cat)) setCat(undefined)
+    if (!categories(t).some((c) => c.id === cat)) setCat(undefined)
   }
 
   function pick(c: string) {
@@ -191,11 +193,11 @@ function Sheet() {
     if (t !== type) { setType(t); found.add('type') }
     if (g.amount && Number.isSafeInteger(g.amount) && g.amount > 0) { setInput(amountToInput(g.amount)); found.add('amount') }
     if (g.date && /^\d{4}-\d{2}-\d{2}$/.test(g.date)) { setDate(g.date); found.add('date') }
-    if (g.category && CATEGORIES[t].some((c) => c.id === g.category)) {
+    if (g.category && categories(t).some((c) => c.id === g.category)) {
       setCat(g.category)
       setExtra(g.category)
       found.add('cat')
-    } else if (!CATEGORIES[t].some((c) => c.id === cat)) setCat(undefined)
+    } else if (!categories(t).some((c) => c.id === cat)) setCat(undefined)
     if (g.note) { setNote(g.note.slice(0, 80)); found.add('note') }
     if (g.merchant) { setMerchant(g.merchant.slice(0, 80)); found.add('merchant') }
     setHeard(g.heard ?? '')
@@ -211,6 +213,7 @@ function Sheet() {
     setSource(kind)
     setPhase('busy')
     try {
+      await categoryRepo.load().catch(() => {})
       const guess = await parse(blob, kind, symbol, request.signal)
       if (alive.current && !request.signal.aborted) if (apply(guess)) setPhase('idle'); else fail()
     } catch (err) {
@@ -398,6 +401,19 @@ function Sheet() {
   )
   const catSheet = sub === 'cats' && (
     <SubSheet label="Category" onClose={() => setSub(undefined)}>
+      {!!customCats.length && <>
+        <div className="category-field-label">YOUR CATEGORIES</div>
+        <div className="card category-list">
+          {customCats.map((item) => {
+            const c = category(item.id)
+            return <button className="category-item" key={c.id} aria-pressed={cat === c.id} onClick={() => pick(c.id)}>
+              <span className="cat" style={{ background: c.color }}><c.icon size={22} /></span>{c.label}
+              {cat === c.id && <Check size={18} className="chev" />}
+            </button>
+          })}
+        </div>
+      </>}
+      <div className="category-field-label">BUILT IN</div>
       <div className="cats" role="group" aria-label="Category">
         {CATEGORIES[type].map((c) => (
           <button key={c.id} aria-pressed={cat === c.id} onClick={() => pick(c.id)}>
@@ -530,7 +546,7 @@ function Sheet() {
               <span className="lbl">{c.label}</span>
             </button>
           ))}
-          {CATEGORIES[type].length > 4 && (
+          {allCats.length > 4 && (
             <button onClick={() => setSub('cats')}>
               <span className="cat more"><Ellipsis size={24} /></span>
               <span className="lbl">More</span>

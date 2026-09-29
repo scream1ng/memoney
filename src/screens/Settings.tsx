@@ -1,5 +1,6 @@
-import { Check, ChevronRight, Coins, Fingerprint, LogOut } from 'lucide-react'
+import { Check, ChevronRight, Coins, Fingerprint, Grid2X2, LogOut } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Usage } from './Usage'
 import { authClient } from '../lib/auth'
 import { currencyAtom, useAtom } from '../lib/store'
@@ -7,6 +8,7 @@ import { currencyAtom, useAtom } from '../lib/store'
 const CURRENCIES = ['', '฿', '$', '€', '£', '¥', '₫', 'RM']
 
 export function Settings() {
+  const navigate = useNavigate()
   const [cur, setCur] = useAtom(currencyAtom)
   const [open, setOpen] = useState(false)
   const [added, setAdded] = useState(false)
@@ -32,6 +34,10 @@ export function Settings() {
             ))}
           </div>
         )}
+        <button className="row between" onClick={() => navigate('/settings/categories')}>
+          <span className="row"><span className="ico" style={{ background: 'var(--accent)' }}><Grid2X2 size={18} /></span>Categories</span>
+          <span className="val"><ChevronRight size={18} /></span>
+        </button>
       </section>
       <section className="card set">
         <button className="row between" onClick={addPasskey} disabled={added}>

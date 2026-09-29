@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { CatIcon, MonthSwitch, TypeToggle } from '../components/ui'
-import { category } from '../lib/categories'
+import { category, useCustomCategories } from '../lib/categories'
 import { money } from '../lib/format'
 import { currencyAtom, forMonth, monthAtom, useAtom, useTransactions } from '../lib/store'
 import type { TxType } from '../lib/types'
 import { Empty } from './Home'
 
 export function Stats() {
+  useCustomCategories()
   const all = useTransactions()
   const [month] = useAtom(monthAtom)
   const [symbol] = useAtom(currencyAtom)
@@ -30,7 +31,7 @@ export function Stats() {
               <CatIcon id={id} />
               <div className="grow">
                 <div className="row between">
-                  <span className="muted">{Math.round((v / total) * 100)}%</span>
+                  <span>{category(id).label} <small className="muted">{Math.round((v / total) * 100)}%</small></span>
                   <span className="num">{money(v, symbol)}</span>
                 </div>
                 <div className="bar"><i style={{ width: `${(v / max) * 100}%`, background: category(id).color }} /></div>

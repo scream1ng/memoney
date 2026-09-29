@@ -9,6 +9,7 @@ import type { Tx } from '../src/lib/types.ts'
 import { usageSchema, usageRecorder, usageRoutes } from './usage.ts'
 import { parseRoutes } from './parse.ts'
 import { pgPhotoStore, photoRoutes, photoSchema } from './photos.ts'
+import { categoryRoutes, categorySchema, pgCategoryStore, saveCategorizedTransaction } from './categories.ts'
 
 pg.types.setTypeParser(20, Number) // bigint → number
 pg.types.setTypeParser(1082, (v) => v) // date → 'YYYY-MM-DD'
@@ -51,6 +52,9 @@ await db.query(`
 
 await db.query(usageSchema)
 await db.query(photoSchema)
+await db.query(categorySchema)
+
+const categoryStore = pgCategoryStore(db)
 
 type Vars = { Variables: { userId: string } }
 const app = new Hono<Vars>()
@@ -60,7 +64,12 @@ app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 app.route('/api/parse', parseRoutes(async (request) => {
   const session = await auth.api.getSession({ headers: request.headers })
   return session?.user.id
-}, new URL(baseURL).origin, usageRecorder(db)))
+}, new URL(baseURL).origin, usageRecorder(db), (userId) => categoryStore.list(userId)))
+
+app.route('/api/categories', categoryRoutes(categoryStore, async (request) => {
+  const session = await auth.api.getSession({ headers: request.headers })
+  return session?.user.id
+}))
 
 app.route('/api/usage', usageRoutes(db, async (request) => {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -92,18 +101,11 @@ app.put('/api/tx/:id', async (c) => {
   const ok =
     (t.type === 'expense' || t.type === 'income') &&
     Number.isSafeInteger(t.amount) && t.amount > 0 &&
-    typeof t.category === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.date) &&
+    typeof t.category === 'string' && t.category.length > 0 && t.category.length <= 40 && /^\d{4}-\d{2}-\d{2}$/.test(t.date) &&
     Number.isSafeInteger(t.createdAt)
   if (!ok) return c.json({ error: 'invalid' }, 400)
-  // "where" stops one user overwriting another user's row by id
-  await db.query(
-    `insert into transactions (id, user_id, type, amount, category, date, note, merchant, created_at)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     on conflict (id) do update set type = $3, amount = $4, category = $5, date = $6, note = $7, merchant = $8
-     where transactions.user_id = $2`,
-    [c.req.param('id'), c.get('userId'), t.type, t.amount, t.category.slice(0, 40), t.date,
-      t.note?.slice(0, 80) ?? null, t.merchant?.slice(0, 80) ?? null, t.createdAt],
-  )
+  const saved = await saveCategorizedTransaction(db, c.get('userId'), c.req.param('id'), t)
+  if (!saved) return c.json({ error: 'unknown category' }, 400)
   return c.body(null, 204)
 })
 

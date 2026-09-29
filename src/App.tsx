@@ -5,11 +5,13 @@ import { Usage } from './screens/Usage'
 import { Dock } from './components/ui'
 import { PasskeyPrompt } from './components/PasskeyPrompt'
 import { authClient } from './lib/auth'
+import { categoryRepo } from './lib/categories'
 import { repo } from './lib/store'
 import { AddSheet } from './screens/AddSheet'
 import { Home } from './screens/Home'
 import { Login } from './screens/Login'
 import { Settings } from './screens/Settings'
+import { Categories } from './screens/Categories'
 import { Stats } from './screens/Stats'
 
 function Shell() {
@@ -25,6 +27,7 @@ function Shell() {
         <Route path="/stats" element={<Stats />} />
         <Route path="/admin" element={admin ? <main className="screen"><h1>Admin</h1><Usage admin /></main> : <Navigate to="/" replace />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/categories" element={<Categories />} />
         <Route path="/add" element={<><Home /><AddSheet /></>} />
         <Route path="/tx/:id" element={<><Home /><AddSheet /></>} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -88,7 +91,10 @@ export default function App() {
   const userId = data?.user.id
   useIdleLogout(data?.session.id)
   useEffect(() => {
-    if (userId) repo.load().catch((e) => console.error('[repo]', e))
+    if (userId) {
+      repo.load().catch((e) => console.error('[repo]', e))
+      categoryRepo.load(userId).catch((e) => console.error('[categories]', e))
+    }
   }, [userId])
   if (isPending) return null
   return <HashRouter>{userId ? <Shell /> : <Login />}</HashRouter>

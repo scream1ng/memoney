@@ -1,5 +1,14 @@
 export type TxType = 'expense' | 'income'
 
+export interface CustomCategory {
+  id: string
+  type: TxType
+  label: string
+  icon: string
+  color: string
+  clues: string
+}
+
 /** Fields read from a voice clip or receipt photo. The user confirms every guess. */
 export interface Guess {
   type?: TxType
