@@ -1,6 +1,7 @@
 import { CalendarDays, Camera, Check, ChevronRight, Delete, Ellipsis, LoaderCircle, Mic, NotebookPen, PenLine, Square, Store, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useDragClose } from '../hooks/useDragClose'
 import { TypeToggle } from '../components/ui'
 import { clearCapture, peekCapture, type Capture } from '../lib/capture'
 import { ACTIVE_CATEGORIES, CATEGORIES, categories, category, categoryRepo, useCategories, useCustomCategories } from '../lib/categories'
@@ -638,36 +639,4 @@ function SubSheet({ label, onClose, children }: { label: string; onClose: () => 
       </div>
     </div>
   )
-}
-
-/** Drag the sheet's top area down past 100px to close. */
-function useDragClose(onClose: () => void) {
-  const [dy, setDy] = useState(0)
-  const start = useRef<number | null>(null)
-  const last = useRef(0) // read on pointerup; state can lag a fast flick by a render
-  const move = (y: number) => {
-    last.current = y
-    setDy(y)
-  }
-  const end = () => {
-    if (start.current == null) return
-    start.current = null
-    if (last.current > 100) onClose()
-    else move(0)
-  }
-  return {
-    style: dy ? { transform: `translateY(${dy}px)`, transition: 'none' } : undefined,
-    handlers: {
-      onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-        if ((e.target as HTMLElement).closest('button, input, label')) return
-        start.current = e.clientY
-        e.currentTarget.setPointerCapture(e.pointerId)
-      },
-      onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-        if (start.current != null) move(Math.max(0, e.clientY - start.current))
-      },
-      onPointerUp: end,
-      onPointerCancel: end,
-    },
-  }
 }

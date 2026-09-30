@@ -1,5 +1,6 @@
 import { Fingerprint } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useDragClose } from '../hooks/useDragClose'
 import { authClient } from '../lib/auth'
 
 export function PasskeyPrompt({ userId }: { userId: string }) {
@@ -30,6 +31,7 @@ export function PasskeyPrompt({ userId }: { userId: string }) {
     try { localStorage.setItem(key, '1') } catch { /* ignore */ }
     setOpen(false)
   }
+  const drag = useDragClose(dismiss, busy)
   const add = async () => {
     setBusy(true)
     setError(false)
@@ -44,10 +46,12 @@ export function PasskeyPrompt({ userId }: { userId: string }) {
     }
   }
 
-  return <dialog ref={dialog} className="passkey-prompt" aria-labelledby="passkey-title" aria-describedby="passkey-description" onCancel={(e) => { e.preventDefault(); if (!busy) dismiss() }}>
-    <Fingerprint size={32} aria-hidden />
-    <h2 id="passkey-title">Set up a passkey?</h2>
-    <p id="passkey-description">Sign in next time with Face ID, Touch ID, or your device passcode.</p>
+  return <dialog ref={dialog} className="passkey-prompt" style={drag.style} aria-labelledby="passkey-title" aria-describedby="passkey-description" onCancel={(e) => { e.preventDefault(); if (!busy) dismiss() }}>
+    <div className="modal-handle" {...drag.handlers}>
+      <Fingerprint size={32} aria-hidden />
+      <h2 id="passkey-title">Set up a passkey?</h2>
+      <p id="passkey-description">Sign in next time with Face ID, Touch ID, or your device passcode.</p>
+    </div>
     {error && <p className="error" role="alert">Couldn’t set up your passkey. Try again.</p>}
     <button className="primary" onClick={add} disabled={busy}>{busy ? 'Setting up…' : 'Set up passkey'}</button>
     <button onClick={dismiss} disabled={busy}>Maybe later</button>

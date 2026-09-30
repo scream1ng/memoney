@@ -1,5 +1,6 @@
 import { Download, Share2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useDragClose } from '../hooks/useDragClose'
 import type { Tx } from '../lib/types'
 
 export function ReportExportSheet({ label, filename, transactions, symbol, onClose }: {
@@ -12,6 +13,7 @@ export function ReportExportSheet({ label, filename, transactions, symbol, onClo
   const [file, setFile] = useState<File>()
   const [error, setError] = useState('')
   const [sharing, setSharing] = useState(false)
+  const drag = useDragClose(onClose, sharing)
   const closeRef = useRef<HTMLButtonElement>(null)
   const busyRef = useRef(false)
   const canShare = !!file && !!navigator.share && !!navigator.canShare?.({ files: [file] })
@@ -60,9 +62,11 @@ export function ReportExportSheet({ label, filename, transactions, symbol, onClo
 
   return (
     <div className="report-export-wrap" onClick={() => { if (!sharing) onClose() }}>
-      <section className="report-export-sheet" role="dialog" aria-modal="true" aria-labelledby="report-export-title" onClick={(event) => event.stopPropagation()}>
-        <div className="grab" />
-        <div className="report-export-head"><h2 id="report-export-title">Export {label}</h2><button ref={closeRef} aria-label="Close export options" onClick={onClose} disabled={sharing}><X size={20} /></button></div>
+      <section style={drag.style} className="report-export-sheet" role="dialog" aria-modal="true" aria-labelledby="report-export-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-handle" {...drag.handlers}>
+          <div className="grab" aria-hidden />
+          <div className="report-export-head"><h2 id="report-export-title">Export {label}</h2><button ref={closeRef} aria-label="Close export options" onClick={onClose} disabled={sharing}><X size={20} /></button></div>
+        </div>
         {error && <div className="warn" role="alert">{error}</div>}
         {!file && !error && <div className="muted report-export-wait" role="status">Preparing PDF…</div>}
         {file && <div className="card report-export-options">

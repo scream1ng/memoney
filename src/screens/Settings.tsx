@@ -1,6 +1,7 @@
 import { Check, ChevronRight, Coins, Fingerprint, Grid2X2, LogOut, Shield, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useDragClose } from '../hooks/useDragClose'
 import { Usage } from './Usage'
 import { authClient } from '../lib/auth'
 import { currencyAtom, useAtom } from '../lib/store'
@@ -12,6 +13,7 @@ export function Settings({ admin }: { admin: boolean }) {
   const navigate = useNavigate()
   const [cur, setCur] = useAtom(currencyAtom)
   const [open, setOpen] = useState(false)
+  const drag = useDragClose(() => setOpen(false))
   const [added, setAdded] = useState(false)
   const currencyRef = useRef<HTMLButtonElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -59,9 +61,11 @@ export function Settings({ admin }: { admin: boolean }) {
         </button>
       </section>
       {open && <div className="currency-wrap" onClick={() => setOpen(false)}>
-        <section className="currency-sheet" role="dialog" aria-modal="true" aria-labelledby="currency-title" onClick={(event) => event.stopPropagation()}>
-          <div className="grab" />
-          <div className="currency-head"><h2 id="currency-title">Currency</h2><button ref={closeRef} aria-label="Close currency" onClick={() => setOpen(false)}><X size={20} /></button></div>
+        <section style={drag.style} className="currency-sheet" role="dialog" aria-modal="true" aria-labelledby="currency-title" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-handle" {...drag.handlers}>
+            <div className="grab" aria-hidden />
+            <div className="currency-head"><h2 id="currency-title">Currency</h2><button ref={closeRef} aria-label="Close currency" onClick={() => setOpen(false)}><X size={20} /></button></div>
+          </div>
           <div className="card currency-options">
             {CURRENCIES.map((c, i) => <button key={c} aria-pressed={cur === c} onClick={() => { setCur(c); setOpen(false) }}>
               <strong>{c || '–'}</strong><span>{CURRENCY_NAMES[i]}</span>{cur === c && <Check size={20} />}
