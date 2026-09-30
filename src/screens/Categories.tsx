@@ -1,5 +1,6 @@
 import { Check, ChevronRight, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useDeleteTap } from '../hooks/useDeleteTap'
 import { useDragClose } from '../hooks/useDragClose'
 import { ACTIVE_CATEGORIES, COLORS, ICONS, categoryRepo, useCustomCategories } from '../lib/categories'
 import type { CustomCategory, TxType } from '../lib/types'
@@ -107,27 +108,34 @@ function CategoryModal({ draft, pending, error, deleteReady, onChange, onClose, 
   onClose: () => void; onSave: (e: React.FormEvent) => void; onDelete: () => void
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
-  const drag = useDragClose(onClose, pending)
+  const [closing, setClosing] = useState(false)
+  const dismiss = () => { if (!pending) setClosing(true) }
+  const drag = useDragClose(dismiss, pending || closing, true)
+  useEffect(() => {
+    if (!closing) return
+    const timer = window.setTimeout(onClose, 250)
+    return () => window.clearTimeout(timer)
+  }, [closing, onClose])
   useEffect(() => {
     const trigger = document.activeElement as HTMLElement | null
     const modal = dialog.current!
     modal.showModal()
     return () => { modal.close(); trigger?.focus() }
   }, [])
-  return <dialog ref={dialog} className="category-modal" style={drag.style} aria-labelledby="category-modal-title"
-    aria-describedby="category-modal-context" onCancel={(e) => { e.preventDefault(); if (!pending) onClose() }}
+  return <dialog ref={dialog} className={`glass sheet category-modal${closing ? ' closing' : ''}`} style={drag.style} aria-labelledby="category-modal-title"
+    aria-describedby="category-modal-context" onCancel={(e) => { e.preventDefault(); if (!pending) dismiss() }}
     onClick={(e) => {
-      if (pending || e.target !== e.currentTarget) return
+      if (pending || closing || e.target !== e.currentTarget) return
       const r = e.currentTarget.getBoundingClientRect()
-      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) onClose()
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dismiss()
     }}>
     <div className="modal-handle" {...drag.handlers}>
       <div className="grab" aria-hidden />
       <div className="category-modal-head"><h2 id="category-modal-title">{draft.id ? 'Edit category' : 'New category'}</h2>
-        <button type="button" aria-label="Close category" disabled={pending} onClick={onClose}><X size={20} /></button></div>
+        <button type="button" aria-label="Close category" disabled={pending || closing} onClick={dismiss}><X size={20} /></button></div>
       <p className="category-modal-context" id="category-modal-context">{draft.type === 'expense' ? 'Expense' : 'Income'} category</p>
     </div>
-    <form className="category-form" onSubmit={onSave}>
+    <form className="category-form" onSubmit={(e) => { if (closing) e.preventDefault(); else onSave(e) }}>
       <label className="category-field-label" htmlFor="category-name">NAME</label>
       <div className="card category-name"><span className="cat" style={{ background: draft.color }}>{renderIcon(draft.icon)}</span>
         <input id="category-name" value={draft.label} maxLength={40} placeholder="Category name" autoFocus disabled={pending}
@@ -147,7 +155,7 @@ function CategoryModal({ draft, pending, error, deleteReady, onChange, onClose, 
       {draft.id && <button className="category-delete" type="button" disabled={pending} onClick={onDelete}>
         <Trash2 size={18} />{deleteReady ? 'Confirm delete' : 'Delete category'}</button>}
       <div className="category-modal-actions">
-        <button className="category-modal-cancel" type="button" disabled={pending} onClick={onClose}>Cancel</button>
+        <button className="category-modal-cancel" type="button" disabled={pending || closing} onClick={dismiss}>Cancel</button>
         <button className="category-modal-save" type="submit" disabled={pending || !draft.label.trim()}>
           {pending ? 'Saving…' : draft.id ? 'Save changes' : 'Add category'}</button>
       </div>
@@ -167,10 +175,12 @@ function CategoryRow({ item, open, pending, onOpen, onEdit, onDelete }: {
   const drag = useRef<{ x: number; y: number; id: number; swiping: boolean; moved: boolean; dx: number }>(null)
   const base = open ? -REVEAL : 0
   const x = dx ?? base
+  const canDelete = open && dx === undefined && !pending
+  const deleteTap = useDeleteTap(onDelete, canDelete)
   const Icon = ICONS[item.icon]
   return (
     <div className={`category-swipe ${open || (dx ?? 0) < 0 ? 'revealed' : ''}`}>
-      <button className="category-swipe-delete" aria-label={`Delete ${item.label}`} tabIndex={open ? 0 : -1} disabled={pending} onClick={onDelete}>Delete</button>
+      <button className="category-swipe-delete" aria-label={`Delete ${item.label}`} tabIndex={canDelete ? 0 : -1} disabled={!canDelete} {...deleteTap}>Delete</button>
       <button className="category-item category-swipe-content" style={{ transform: x ? `translateX(${x}px)` : undefined, transition: dx === undefined ? undefined : 'none' }}
         onPointerDown={(e) => { if (e.pointerType !== 'mouse' || e.button === 0) drag.current = { x: e.clientX, y: e.clientY, id: e.pointerId, swiping: false, moved: false, dx: base } }}
         onPointerMove={(e) => {

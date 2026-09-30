@@ -1,6 +1,7 @@
 import { Camera, Download, House, Mic, Paperclip, PenLine, Plus, Settings, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useDeleteTap } from '../hooks/useDeleteTap'
 import { setCapture } from '../lib/capture'
 import { category, useCustomCategories } from '../lib/categories'
 import { dayLabel, money } from '../lib/format'
@@ -167,9 +168,11 @@ function SwipeRow({ open, onOpen, onDelete, onTap, label, children }: {
   const drag = useRef<{ x: number; y: number; id: number; swiping: boolean; moved: boolean; dx: number }>(null)
   const base = open ? -REVEAL : 0
   const x = dx ?? base
+  const canDelete = open && dx === undefined
+  const deleteTap = useDeleteTap(onDelete, canDelete)
   return (
     <div className={`swipe ${open || (dx ?? 0) < 0 ? 'revealed' : ''}`}>
-      <button className="swipe-delete" aria-label={`Delete ${label}`} tabIndex={open ? 0 : -1} onClick={onDelete}>
+      <button className="swipe-delete" aria-label={`Delete ${label}`} tabIndex={canDelete ? 0 : -1} disabled={!canDelete} {...deleteTap}>
         Delete
       </button>
       <button

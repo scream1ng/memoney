@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent } from 'react'
 
 /** Drag a sheet's header down to dismiss; interrupted gestures always snap back. */
-export function useDragClose(onClose: () => void, disabled = false) {
+export function useDragClose(onClose: () => void, disabled = false, animateDismiss = false) {
   const [dy, setDy] = useState(0)
   const gesture = useRef<{ id: number; y: number; distance: number } | null>(null)
   const reset = () => { gesture.current = null; setDy(0) }
@@ -24,11 +24,14 @@ export function useDragClose(onClose: () => void, disabled = false) {
         const g = gesture.current
         if (!g || g.id !== e.pointerId) return
         const distance = Math.max(0, e.clientY - g.y)
-        reset()
-        if (!disabled && distance > 100) onClose()
+        if (!disabled && distance > 100) {
+          if (animateDismiss) { gesture.current = null; setDy(distance) }
+          else reset()
+          onClose()
+        } else reset()
       },
       onPointerCancel: reset,
-      onLostPointerCapture: reset,
+      onLostPointerCapture() { if (gesture.current) reset() },
     },
   }
 }
