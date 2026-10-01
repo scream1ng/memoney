@@ -2,6 +2,7 @@ import { Download, Share2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useDragClose } from '../hooks/useDragClose'
 import type { Tx } from '../lib/types'
+import { createReportCsv } from '../lib/reportCsv'
 
 export function ReportExportSheet({ label, filename, transactions, symbol, onClose }: {
   label: string
@@ -46,13 +47,13 @@ export function ReportExportSheet({ label, filename, transactions, symbol, onClo
     } finally { busyRef.current = false; setSharing(false) }
   }
 
-  function download() {
-    if (!file || busyRef.current) return
+  function download(ready: File) {
+    if (busyRef.current) return
     busyRef.current = true
-    const url = URL.createObjectURL(file)
+    const url = URL.createObjectURL(ready)
     const link = document.createElement('a')
     link.href = url
-    link.download = file.name
+    link.download = ready.name
     document.body.append(link)
     link.click()
     link.remove()
@@ -69,10 +70,11 @@ export function ReportExportSheet({ label, filename, transactions, symbol, onClo
         </div>
         {error && <div className="warn" role="alert">{error}</div>}
         {!file && !error && <div className="muted report-export-wait" role="status">Preparing PDF…</div>}
-        {file && <div className="card report-export-options">
+        <div className="card report-export-options">
           {canShare && <button onClick={() => void share()} disabled={sharing}><Share2 size={22} /><span><strong>Share PDF</strong><small>Choose Mail, Files or another app</small></span></button>}
-          <button onClick={download} disabled={sharing}><Download size={22} /><span><strong>Download PDF</strong><small>Save a copy on this device</small></span></button>
-        </div>}
+          <button onClick={() => file && download(file)} disabled={!file || sharing}><Download size={22} /><span><strong>Download PDF</strong><small>Save a copy on this device</small></span></button>
+          <button onClick={() => download(createReportCsv(filename.replace(/\.pdf$/i, '.csv'), transactions, symbol))} disabled={sharing}><Download size={22} /><span><strong>Download CSV</strong><small>Open in Excel or another spreadsheet app</small></span></button>
+        </div>
         {file && !canShare && <p className="muted report-export-hint">File sharing is unavailable here. Download the PDF to attach it in your email app.</p>}
       </section>
     </div>

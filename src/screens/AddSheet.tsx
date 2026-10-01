@@ -1,10 +1,10 @@
-import { CalendarDays, Camera, Check, ChevronRight, Delete, Ellipsis, LoaderCircle, Mic, NotebookPen, PenLine, Square, Store, Trash2, TriangleAlert, X } from 'lucide-react'
+import { CalendarDays, Camera, Check, ChevronRight, Delete, Ellipsis, LoaderCircle, NotebookPen, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useDragClose } from '../hooks/useDragClose'
 import { TypeToggle } from '../components/ui'
 import { clearCapture, peekCapture, type Capture } from '../lib/capture'
-import { ACTIVE_CATEGORIES, CATEGORIES, categories, category, categoryRepo, useCategories, useCustomCategories } from '../lib/categories'
+import { ACTIVE_CATEGORIES, CATEGORIES, categories, category, categoryRepo, useCustomCategories } from '../lib/categories'
 import { toJpeg } from '../lib/image'
 import { amountToInput, dayLabel, money, parseAmount, today, uid } from '../lib/format'
 import { parse, type Guess } from '../lib/parse'
@@ -17,7 +17,6 @@ type Phase = 'idle' | 'requesting' | 'rec' | 'busy' | 'failed'
 const MAX_REC_MS = 30_000
 const SILENCE_MS = 1_000
 const NO_SPEECH_MS = 8_000
-const FLAT_WAVE = 'M 0 28 L 160 28'
 
 /** "1250.5" → "1,250.5"; keeps a trailing "." while typing */
 function group(input: string): string {
@@ -48,26 +47,20 @@ function Sheet() {
     const c = peekCapture()
     return !id && c && ((via === 'camera' && c.kind === 'image') || (via === 'voice' && c.kind === 'audio')) ? c : undefined
   })
-  const review = !!capture
   const [editAmount, setEditAmount] = useState(false)
   const orbRef = useRef<HTMLDivElement>(null)
 
   const [type, setType] = useState<TxType>(existing?.type ?? 'expense')
-  const allCats = useCategories(type)
   const customCats = useCustomCategories().filter((c) => c.type === type)
   const [input, setInput] = useState(existing ? amountToInput(existing.amount) : '')
   const [cat, setCat] = useState<string | undefined>(existing?.category)
   const [date, setDate] = useState(existing?.date ?? today())
   const [note, setNote] = useState(existing?.note ?? '')
   const [merchant, setMerchant] = useState(existing?.merchant ?? '')
-  const [showNote, setShowNote] = useState(false)
   const [armDelete, setArmDelete] = useState(false)
   const [hints, setHints] = useState<Set<Field>>(new Set())
-  // a category picked from More takes the 4th slot for this session
-  const [extra, setExtra] = useState<string | undefined>(existing?.category)
   const [sub, setSub] = useState<'cats' | 'photo'>()
   const [phase, setPhase] = useState<Phase>(capture ? (capture.kind === 'audio' ? 'requesting' : 'busy') : 'idle')
-  const [voicePath, setVoicePath] = useState(FLAT_WAVE)
   const [source, setSource] = useState<'audio' | 'image'>(capture?.kind ?? 'image')
   const [heard, setHeard] = useState('')
   const [parseError, setParseError] = useState('')
@@ -97,17 +90,6 @@ function Sheet() {
   const changed = !existing || photo !== undefined || type !== existing.type || amount !== existing.amount || cat !== existing.category ||
     date !== existing.date || note.trim() !== (existing.note ?? '') || merchant.trim() !== (existing.merchant ?? '')
   const unhint = (f: Field) => setHints((h) => (h.has(f) ? new Set([...h].filter((x) => x !== f)) : h))
-
-  const top = useMemo(() => {
-    const count = new Map<string, number>()
-    const order = new Map(ACTIVE_CATEGORIES[type].map((c, i) => [c.id, i]))
-    for (const t of all) if (t.type === type) count.set(t.category, (count.get(t.category) ?? 0) + 1)
-    return allCats.filter((c) => !CATEGORIES[type].some((builtIn) => builtIn.id === c.id) || ACTIVE_CATEGORIES[type].some((active) => active.id === c.id))
-      .sort((a, b) => (count.get(b.id) ?? 0) - (count.get(a.id) ?? 0) || (order.get(a.id) ?? -1) - (order.get(b.id) ?? -1)).slice(0, 4)
-  }, [all, allCats, type])
-  const shown = extra && !top.some((c) => c.id === extra) && allCats.some((c) => c.id === extra)
-    ? [...top.slice(0, 3), category(extra)]
-    : top
 
   const localUrl = useMemo(() => photo && URL.createObjectURL(photo), [photo])
   useEffect(() => () => { if (localUrl) URL.revokeObjectURL(localUrl) }, [localUrl])
@@ -185,7 +167,6 @@ function Sheet() {
 
   function pick(c: string) {
     setCat(c)
-    setExtra(c)
     unhint('cat')
     setSub(undefined)
   }
@@ -198,7 +179,6 @@ function Sheet() {
     if (g.date && /^\d{4}-\d{2}-\d{2}$/.test(g.date)) { setDate(g.date); found.add('date') }
     if (g.category && categories(t).some((c) => c.id === g.category)) {
       setCat(g.category)
-      setExtra(g.category)
       found.add('cat')
     } else if (!categories(t).some((c) => c.id === cat)) setCat(undefined)
     if (g.note) { setNote(g.note.slice(0, 80)); found.add('note') }
@@ -272,7 +252,6 @@ function Sheet() {
         stream.getTracks().forEach((t) => t.stop())
         recRef.current = null
         if (!alive.current) return
-        setVoicePath(FLAT_WAVE)
         if (noSpeech) { setParseError('No speech heard. Try again.'); fail() }
         else void run(new Blob(chunks, { type: rec.mimeType }), 'audio')
       }
@@ -301,22 +280,6 @@ function Sheet() {
           for (const sample of samples) sum += ((sample - 128) / 128) ** 2
           const level = Math.sqrt(sum / samples.length)
           orbRef.current?.style.setProperty('--level', String(Math.min(1, level * 6)))
-          if (level < 0.012) setVoicePath(FLAT_WAVE)
-          else {
-            const points = ['M 0 28', 'L 20 28']
-            const step = Math.floor(samples.length / 30)
-            for (let i = 1; i < 30; i++) {
-              let peak = 0
-              for (let j = (i - 1) * step; j < i * step; j++) {
-                const sample = (samples[j] - 128) / 128
-                if (Math.abs(sample) > Math.abs(peak)) peak = sample
-              }
-              const taper = Math.min(1, i / 5, (30 - i) / 5)
-              points.push(`L ${20 + i * 4} ${28 - Math.round(Math.max(-24, Math.min(24, peak * 120)) * taper)}`)
-            }
-            points.push('L 140 28', 'L 160 28')
-            setVoicePath(points.join(' '))
-          }
           const now = performance.now()
           if (level > 0.018) {
             voiceMs += 100
@@ -398,7 +361,7 @@ function Sheet() {
     </div>
   )
   const amountText = (
-    <div ref={amountRef} className={`amount num ${!input ? 'empty' : type === 'income' ? 'inc' : 'exp'} ${review ? '' : h('amount')}`} aria-live="polite">
+    <div ref={amountRef} className={`amount num ${!input ? 'empty' : type === 'income' ? 'inc' : 'exp'}`} aria-live="polite">
       {shownAmount}
     </div>
   )
@@ -448,152 +411,76 @@ function Sheet() {
   )
   const fileInput = <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
 
-  // Camera / Voice drafts and saved entries share the card layout
-  if (review || existing) {
-    const c = cat ? category(cat) : undefined
-    const dot = <span className="hint-mark" aria-label="Guessed" />
-    return (
-      <div className="sheet-wrap" onClick={close}>
-        <div className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} role="dialog" aria-modal="true" aria-label={existing ? 'Edit entry' : 'Review entry'}
-          style={drag.style} onClick={(e) => e.stopPropagation()}>
-          {header}
-          {phase === 'busy' ? readingReceipt : (
-            <>
-              {existing ? (
-                (merchant || photoUrl) && <div className="review-source">{[merchant, photoUrl && 'receipt attached'].filter(Boolean).join(' · ')}</div>
-              ) : (
-                <div className="review-source">
-                  {source === 'image' ? 'From your receipt' : 'From your voice'}{merchant && ` · ${merchant}`}
-                  {!!hints.size && <> · {dot} = our guess, tap to change</>}
-                </div>
-              )}
-              {heard && <div className="heard">“{heard}”</div>}
-              {warning}
-              {editAmount ? (
-                <div className="review-amount editing"><small>Amount</small>{amountText}</div>
-              ) : (
-                <button className="review-amount" onClick={() => setEditAmount(true)}>
-                  <small>Amount{hints.has('amount') && <> {dot}</>}</small>{amountText}<span className="edit-cue">Tap to edit</span>
-                </button>
-              )}
-              <button className="review-category" onClick={() => setSub('cats')}>
-                {c ? <span className="cat" style={{ background: c.color }}><c.icon size={24} /></span> : <span className="cat more"><Ellipsis size={24} /></span>}
-                <span className="value"><small>Category</small><strong>{c?.label ?? 'Choose category'}</strong></span>
-                {hints.has('cat') && dot}
-                <ChevronRight size={16} className="chev" />
-              </button>
-              {editAmount ? (
-                <>
-                  {keypad}
-                  <button className="review-save" onClick={() => setEditAmount(false)}>Done</button>
-                </>
-              ) : (
-                <>
-                  <label className="review-row">
-                    <span className="tile note"><NotebookPen size={22} /></span>
-                    <span className="value"><small>Note</small>
-                      <input value={note} placeholder="Add a note" maxLength={80} onChange={(e) => { setNote(e.target.value); unhint('note') }} />
-                    </span>
-                    {hints.has('note') && dot}
-                  </label>
-                  {(existing || capture?.kind === 'image') && (
-                    <button className="review-row" onClick={() => (photoUrl ? setSub('photo') : fileRef.current?.click())}>
-                      {photoUrl ? <img className="tile" src={photoUrl} alt="" /> : <span className="tile add"><Camera size={22} /></span>}
-                      <span className="value"><small>Receipt</small><strong>{photoUrl ? 'View photo' : 'Add receipt photo'}</strong></span>
-                      <ChevronRight size={16} className="chev" />
-                    </button>
-                  )}
-                  {photoError && <div className="warn" role="alert"><TriangleAlert size={18} />{photoError}</div>}
-                  {existing ? (
-                    <div className="edit-bar">
-                      <button className={`round ${armDelete ? 'armed' : 'exp'}`} aria-label={armDelete ? 'Confirm delete' : 'Delete'} onClick={remove}>
-                        <Trash2 size={22} />
-                      </button>
-                      <button className="review-save" disabled={!canSave || !changed} onClick={save}>Save changes</button>
-                    </div>
-                  ) : (
-                    <button className="review-save" disabled={!canSave} onClick={save}>Save entry</button>
-                  )}
-                </>
-              )}
-            </>
-          )}
-          {fileInput}
-        </div>
-        {catSheet}
-        {photoSheet}
-      </div>
-    )
-  }
-
+  const c = cat ? category(cat) : undefined
+  const dot = <span className="hint-mark" aria-label="Guessed" />
   return (
     <div className="sheet-wrap" onClick={close}>
-      <div
-        className={`glass sheet ${sub ? 'behind' : ''}`}
-        role="dialog" aria-modal="true" aria-label="Add"
-        style={drag.style}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} role="dialog" aria-modal="true" aria-label={existing ? 'Edit entry' : capture ? 'Review entry' : 'Add entry'}
+        style={drag.style} onClick={(e) => e.stopPropagation()}>
         {header}
-
-        {amountText}
-
-        <div className="meta">
-          {merchant && <span className={`chip ${h('merchant')}`} title={merchant}><Store size={16} /><span className="clip">{merchant}</span></span>}
-          <button className={`chip ${note ? h('note') : 'ph'}`} aria-label="Note" aria-pressed={showNote} onClick={() => setShowNote((s) => !s)}>
-            <PenLine size={16} /><span className="clip">{note || (cat ? category(cat).label : 'Note')}</span>
-          </button>
-        </div>
-
-        {showNote && (
-          <input className="note-input" value={note} onChange={(e) => { setNote(e.target.value); unhint('note') }} aria-label="Note" autoFocus maxLength={80} />
-        )}
-        {heard && <div className="heard">“{heard}”</div>}
-        {!!hints.size && phase === 'idle' && <div className="review-hint">Review the highlighted details before saving.</div>}
-
-        <div className="catrow" role="group" aria-label="Category">
-          {shown.map((c) => (
-            <button key={c.id} className={cat === c.id ? h('cat') : undefined} aria-pressed={cat === c.id} onClick={() => pick(c.id)}>
-              <span className="cat" style={{ background: c.color }}><c.icon size={24} /></span>
-              <span className="lbl">{c.label}</span>
-            </button>
-          ))}
-          {allCats.length > 4 && (
-            <button onClick={() => setSub('cats')}>
-              <span className="cat more"><Ellipsis size={24} /></span>
-              <span className="lbl">More</span>
-            </button>
-          )}
-        </div>
-
-        {phase === 'rec' || phase === 'requesting' ? (
-          <div className="ai-panel voice-panel" aria-live="polite">
-            <div className="voice-status"><span className="voice-dot" />{phase === 'requesting' ? 'Connecting microphone' : 'Listening'}</div>
-            <svg className="voice-wave" viewBox="0 0 160 56" aria-hidden="true"><path d={voicePath} /></svg>
-            <div><div className="lbl">{phase === 'requesting' ? 'Allow microphone access' : 'Speak naturally'}</div><div className="sub">{phase === 'requesting' ? 'Waiting for permission…' : 'Stops automatically when you finish'}</div></div>
-          </div>
-        ) : phase === 'busy' ? readingReceipt : (
+        {phase === 'busy' ? readingReceipt : (
           <>
+            {existing ? (
+              (merchant || photoUrl) && <div className="review-source">{[merchant, photoUrl && 'receipt attached'].filter(Boolean).join(' · ')}</div>
+            ) : capture ? (
+              <div className="review-source">
+                {source === 'image' ? 'From your receipt' : 'From your voice'}{merchant && ` · ${merchant}`}
+                {!!hints.size && <> · {dot} = our guess, tap to change</>}
+              </div>
+            ) : null}
+            {heard && <div className="heard">“{heard}”</div>}
             {warning}
-            {keypad}
+            {editAmount ? (
+              <div className="review-amount editing"><small>Amount</small>{amountText}</div>
+            ) : (
+              <button className="review-amount" onClick={() => setEditAmount(true)}>
+                <small>Amount{hints.has('amount') && <> {dot}</>}</small>{amountText}<span className="edit-cue">Tap to edit</span>
+              </button>
+            )}
+            <button className="review-category" onClick={() => setSub('cats')}>
+              {c ? <span className="cat" style={{ background: c.color }}><c.icon size={24} /></span> : <span className="cat more"><Ellipsis size={24} /></span>}
+              <span className="value"><small>Category</small><strong>{c?.label ?? 'Choose category'}</strong></span>
+              {hints.has('cat') && dot}
+              <ChevronRight size={16} className="chev" />
+            </button>
+            {editAmount ? (
+              <>
+                {keypad}
+                <button className="review-save" onClick={() => setEditAmount(false)}>Done</button>
+              </>
+            ) : (
+              <>
+                <label className="review-row">
+                  <span className="tile note"><NotebookPen size={22} /></span>
+                  <span className="value"><small>Note</small>
+                    <input value={note} placeholder="Add a note" maxLength={80} onChange={(e) => { setNote(e.target.value); unhint('note') }} />
+                  </span>
+                  {hints.has('note') && dot}
+                </label>
+                {(!capture || capture.kind === 'image') && (
+                  <button className="review-row" onClick={() => (photoUrl ? setSub('photo') : fileRef.current?.click())}>
+                    {photoUrl ? <img className="tile" src={photoUrl} alt="" /> : <span className="tile add"><Camera size={22} /></span>}
+                    <span className="value"><small>Receipt</small><strong>{photoUrl ? 'View photo' : 'Add receipt photo'}</strong></span>
+                    <ChevronRight size={16} className="chev" />
+                  </button>
+                )}
+                {photoError && <div className="warn" role="alert"><TriangleAlert size={18} />{photoError}</div>}
+                {existing ? (
+                  <div className="edit-bar">
+                    <button className={`round ${armDelete ? 'armed' : 'exp'}`} aria-label={armDelete ? 'Confirm delete' : 'Delete'} onClick={remove}>
+                      <Trash2 size={22} />
+                    </button>
+                    <button className="review-save" disabled={!canSave || !changed} onClick={save}>Save changes</button>
+                  </div>
+                ) : (
+                  <button className="review-save" disabled={!canSave} onClick={save}>Save entry</button>
+                )}
+              </>
+            )}
           </>
         )}
-
-        {photoError && <div className="warn" role="alert"><TriangleAlert size={18} />{photoError}</div>}
-        <div className="bottom">
-          <button className="round" aria-label={photo ? 'Receipt photo' : 'Add receipt photo'} disabled={working}
-            onClick={() => (photo ? setSub('photo') : fileRef.current?.click())}>
-            <Camera size={24} />{photo && <span className="dot" />}
-          </button>
-          <button className={`round ${phase === 'rec' || phase === 'requesting' ? 'voice-stop' : ''}`} aria-label={phase === 'rec' ? 'Stop recording' : phase === 'requesting' ? 'Cancel recording' : 'Voice entry'}
-            disabled={phase === 'busy'} onClick={() => void toggleMic()}>
-            {phase === 'rec' || phase === 'requesting' ? <><Square size={14} fill="currentColor" />{phase === 'rec' ? 'Stop' : 'Cancel'}</> : <Mic size={24} />}
-          </button>
-          <button className="save" disabled={!canSave} onClick={save}>Save</button>
-        </div>
         {fileInput}
       </div>
-
       {catSheet}
       {photoSheet}
     </div>

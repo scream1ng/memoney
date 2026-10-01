@@ -63,27 +63,31 @@ export async function createReportPdf(label: string, filename: string, transacti
     page!.drawText('Amount', { x: RIGHT - 50, y, size: 9, font, color: MUTED })
     y -= 12
     page!.drawLine({ start: { x: LEFT, y }, end: { x: RIGHT, y }, thickness: 0.6, color: LINE })
-    y -= 17
   }
   header()
   if (!transactions.length) {
-    page!.drawText('No transactions for this period', { x: LEFT, y, size: 10, font, color: MUTED })
+    page!.drawText('No transactions for this period', { x: LEFT, y: y - 17, size: 10, font, color: MUTED })
   }
   for (const tx of transactions) {
     const title = tx.merchant || category(tx.category).label
     const detail = `${category(tx.category).label}${tx.note ? ` · ${tx.note}` : ''}`
     const titleLines = wrap(title, font, 10, 226)
     const detailLines = wrap(detail, font, 8, 226)
-    const height = Math.max(40, titleLines.length * 13 + detailLines.length * 11 + 12)
+    const ascent = (size: number) => font.heightAtSize(size, { descender: false })
+    const descent = (size: number) => font.heightAtSize(size) - ascent(size)
+    const textHeight = ascent(10) + titleLines.length * 13 + (detailLines.length - 1) * 11 + descent(8)
+    const height = Math.max(40, textHeight + 16)
     if (y - height < 48) { addPage(); header() }
-    page!.drawText(tx.date, { x: LEFT, y, size: 9, font, color: INK })
-    titleLines.forEach((line, i) => page!.drawText(line, { x: LEFT + 82, y: y - i * 13, size: 10, font, color: INK }))
-    detailLines.forEach((line, i) => page!.drawText(line, { x: LEFT + 82, y: y - titleLines.length * 13 - i * 11, size: 8, font, color: MUTED }))
-    page!.drawText(tx.photoAt ? 'Yes' : '—', { x: RIGHT - 144, y, size: 9, font, color: MUTED })
+    const textY = y - (height - textHeight) / 2 - ascent(10)
+    const cellY = y - height / 2 - (ascent(9) - descent(9)) / 2
+    page!.drawText(tx.date, { x: LEFT, y: cellY, size: 9, font, color: INK })
+    titleLines.forEach((line, i) => page!.drawText(line, { x: LEFT + 82, y: textY - i * 13, size: 10, font, color: INK }))
+    detailLines.forEach((line, i) => page!.drawText(line, { x: LEFT + 82, y: textY - titleLines.length * 13 - i * 11, size: 8, font, color: MUTED }))
+    page!.drawText(tx.photoAt ? 'Yes' : '—', { x: RIGHT - 144, y: cellY, size: 9, font, color: MUTED })
     const value = `${tx.type === 'income' ? '+' : '−'}${money(tx.amount, pdfSymbol)}`
-    page!.drawText(value, { x: RIGHT - font.widthOfTextAtSize(value, 9), y, size: 9, font, color: INK })
+    page!.drawText(value, { x: RIGHT - font.widthOfTextAtSize(value, 9), y: cellY, size: 9, font, color: INK })
     y -= height
-    page!.drawLine({ start: { x: LEFT, y: y + 5 }, end: { x: RIGHT, y: y + 5 }, thickness: 0.4, color: LINE })
+    page!.drawLine({ start: { x: LEFT, y }, end: { x: RIGHT, y }, thickness: 0.4, color: LINE })
   }
   const bytes = await pdf.save()
   return new File([new Uint8Array(bytes)], filename, { type: 'application/pdf' })
