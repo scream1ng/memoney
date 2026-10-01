@@ -1,18 +1,18 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { CatIcon } from '../components/ui'
 import { ReportExportSheet } from '../components/ReportExportSheet'
 import { category, useCustomCategories } from '../lib/categories'
-import { money, monthLabel, shiftMonth, shiftWeek, today, weekLabel, weekStart } from '../lib/format'
-import { currencyAtom, forMonth, forWeek, monthAtom, totals, useAtom, useTransactions } from '../lib/store'
+import { money, monthLabel, shiftMonth, shiftWeek, weekLabel } from '../lib/format'
+import { currencyAtom, forMonth, forWeek, monthAtom, periodAtom, weekAtom, totals, useAtom, useTransactions } from '../lib/store'
 
 export function Stats({ exportOpen, onCloseExport }: { exportOpen: boolean; onCloseExport: () => void }) {
   useCustomCategories()
   const all = useTransactions()
   const [month, setMonth] = useAtom(monthAtom)
   const [symbol] = useAtom(currencyAtom)
-  const [period, setPeriod] = useState<'week' | 'month'>('month')
-  const [week, setWeek] = useState(() => weekStart(today()))
+  const [period, setPeriod] = useAtom(periodAtom)
+  const [week, setWeek] = useAtom(weekAtom)
   const transactions = useMemo(() => period === 'week' ? forWeek(all, week) : forMonth(all, month), [all, period, week, month])
   const { income, expense, balance } = totals(transactions)
   const incomeSums = new Map<string, number>()

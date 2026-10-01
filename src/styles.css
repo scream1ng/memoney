@@ -202,7 +202,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .report-export-options button strong, .report-export-options button small { display: block; }
 .report-export-options button small { margin-top: 3px; color: var(--muted); font-size: 13px; }
 .report-export-options button:disabled { opacity: 0.5; }
-.report-export-wait, .report-export-hint { padding: 14px 4px; font-size: 13px; text-align: center; }
+.report-export-wait { padding: 14px 4px; font-size: 13px; text-align: center; }
 
 /* ---------- add sheet ---------- */
 .sheet-wrap {
@@ -556,3 +556,25 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .category-modal-save { flex: 1; background: var(--accent); color: var(--accent-ink); }
 .category-modal-save:disabled { background: var(--fill); color: var(--muted); }
 .category-modal button:disabled { cursor: default; }
+
+/* Native modals stay in the viewport, including when the page beneath is scrolled. */
+.modal-dialog, .category-modal {
+  position: fixed; inset: auto 0 0; margin: 0 auto calc(env(safe-area-inset-bottom) + 6px);
+  max-height: calc(100dvh - env(safe-area-inset-top) - 12px); overflow-y: auto;
+  border: 0; color: var(--ink);
+}
+.modal-dialog:not([open]) { display: none; }
+.modal-dialog::backdrop { background: rgba(0, 0, 0, 0.34); }
+.modal-dialog.sub::backdrop { background: rgba(0, 0, 0, 0.15); }
+.modal-dialog.voice-mode { inset: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; margin: 0; }
+.category-modal > .modal-handle { position: sticky; top: -8px; z-index: 1; flex: none; background: var(--bg); }
+.category-modal .category-form { flex-shrink: 0; }
+.review-sheet > .handle .seg button { width: 44px; }
+.review-sheet > .handle .icon-btn { flex: none; }
+.empty p { color: var(--muted); font-size: 16px; max-width: 300px; text-align: center; }
+.empty-action { min-height: 56px; padding: 12px 24px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.write-notice { position: fixed; z-index: 25; bottom: calc(env(safe-area-inset-bottom) + 96px); left: 16px; right: 16px; max-width: 448px; margin: auto; padding: 16px; border-radius: 16px; }
+.write-notice button { min-height: 44px; padding: 8px 12px; color: var(--accent); font-weight: 600; }
+@media (max-width: 380px) {
+  .category-modal-colors { grid-template-columns: repeat(4, minmax(44px, 1fr)); }
+}

@@ -5,8 +5,8 @@ import { money } from './format'
 import { totals } from './store'
 import type { Tx } from './types'
 
-const PAGE: [number, number] = [595.28, 841.89] // A4 in points
-const LEFT = 40
+const PAGE: [number, number] = [595.28, 841.89] // Portrait A4 in points
+const LEFT = 28
 const RIGHT = PAGE[0] - LEFT
 const INK = rgb(0.08, 0.08, 0.1)
 const MUTED = rgb(0.42, 0.42, 0.45)
@@ -16,9 +16,16 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   const lines: string[] = []
   let line = ''
   for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
+    if (/^[\r\n]+$/.test(segment)) { lines.push(line); line = ''; continue }
     if (font.widthOfTextAtSize(line + segment, size) > width && line) {
-      lines.push(line)
-      line = segment
+      const space = line.lastIndexOf(' ')
+      if (space > 0) {
+        lines.push(line.slice(0, space))
+        line = (line.slice(space + 1) + segment).trimStart()
+      } else {
+        lines.push(line)
+        line = segment.trimStart()
+      }
     } else line += segment
   }
   if (line) lines.push(line)
@@ -49,45 +56,57 @@ export async function createReportPdf(label: string, filename: string, transacti
   addPage()
 
   const { income, expense, balance } = totals(transactions)
-  for (const [title, amount] of [['Income', income], ['Expenses', expense], ['Net', balance]] as const) {
-    page!.drawText(title, { x: LEFT, y, size: 10, font, color: MUTED })
+  const summaryWidth = (RIGHT - LEFT) / 3
+  let summaryHeight = 0
+  for (const [i, [title, amount]] of ([['Income', income], ['Expenses', expense], ['Net', balance]] as const).entries()) {
+    const x = LEFT + i * summaryWidth
+    page!.drawText(title, { x, y, size: 16, font, color: MUTED })
     const value = `${amount < 0 ? '−' : ''}${money(Math.abs(amount), pdfSymbol)}`
-    page!.drawText(value, { x: RIGHT - font.widthOfTextAtSize(value, 14), y: y - 2, size: 14, font, color: INK })
-    y -= 30
+    const lines = wrap(value, font, 22, summaryWidth - 12)
+    lines.forEach((line, j) => page!.drawText(line, { x, y: y - 30 - j * 28, size: 22, font, color: INK }))
+    summaryHeight = Math.max(summaryHeight, lines.length * 28)
   }
-  y -= 14
+  y -= 46 + summaryHeight
   const header = () => {
-    page!.drawText('Date', { x: LEFT, y, size: 9, font, color: MUTED })
-    page!.drawText('Transaction', { x: LEFT + 82, y, size: 9, font, color: MUTED })
-    page!.drawText('Receipt', { x: RIGHT - 144, y, size: 9, font, color: MUTED })
-    page!.drawText('Amount', { x: RIGHT - 50, y, size: 9, font, color: MUTED })
-    y -= 12
+    page!.drawText('Transactions', { x: LEFT, y, size: 18, font, color: MUTED })
+    y -= 16
     page!.drawLine({ start: { x: LEFT, y }, end: { x: RIGHT, y }, thickness: 0.6, color: LINE })
   }
   header()
   if (!transactions.length) {
-    page!.drawText('No transactions for this period', { x: LEFT, y: y - 17, size: 10, font, color: MUTED })
+    page!.drawText('No transactions for this period', { x: LEFT, y: y - 32, size: 18, font, color: MUTED })
   }
   for (const tx of transactions) {
-    const title = tx.merchant || category(tx.category).label
-    const detail = `${category(tx.category).label}${tx.note ? ` · ${tx.note}` : ''}`
-    const titleLines = wrap(title, font, 10, 226)
-    const detailLines = wrap(detail, font, 8, 226)
-    const ascent = (size: number) => font.heightAtSize(size, { descender: false })
-    const descent = (size: number) => font.heightAtSize(size) - ascent(size)
-    const textHeight = ascent(10) + titleLines.length * 13 + (detailLines.length - 1) * 11 + descent(8)
-    const height = Math.max(40, textHeight + 16)
-    if (y - height < 48) { addPage(); header() }
-    const textY = y - (height - textHeight) / 2 - ascent(10)
-    const cellY = y - height / 2 - (ascent(9) - descent(9)) / 2
-    page!.drawText(tx.date, { x: LEFT, y: cellY, size: 9, font, color: INK })
-    titleLines.forEach((line, i) => page!.drawText(line, { x: LEFT + 82, y: textY - i * 13, size: 10, font, color: INK }))
-    detailLines.forEach((line, i) => page!.drawText(line, { x: LEFT + 82, y: textY - titleLines.length * 13 - i * 11, size: 8, font, color: MUTED }))
-    page!.drawText(tx.photoAt ? 'Yes' : '—', { x: RIGHT - 144, y: cellY, size: 9, font, color: MUTED })
+    const amountWidth = 190
+    const titleLines = wrap(category(tx.category).label, font, 22, RIGHT - LEFT - amountWidth - 16)
     const value = `${tx.type === 'income' ? '+' : '−'}${money(tx.amount, pdfSymbol)}`
-    page!.drawText(value, { x: RIGHT - font.widthOfTextAtSize(value, 9), y: cellY, size: 9, font, color: INK })
-    y -= height
-    page!.drawLine({ start: { x: LEFT, y }, end: { x: RIGHT, y }, thickness: 0.4, color: LINE })
+    const amountLines = wrap(value, font, 22, amountWidth)
+    const meta = `${tx.type === 'income' ? 'Income' : 'Expense'} · ${tx.date} · Receipt: ${tx.photoAt ? 'Yes' : 'No'}`
+    const metaLines = wrap(meta, font, 18, RIGHT - LEFT)
+    const noteLines = wrap(`Note: ${tx.note || '—'}`, font, 20, RIGHT - LEFT)
+    const mainHeight = Math.max(titleLines.length, amountLines.length) * 28
+    const fixedHeight = 16 + font.heightAtSize(22, { descender: false }) + mainHeight + metaLines.length * 24 + 8
+    let offset = 0
+    do {
+      const remainingHeight = fixedHeight + (noteLines.length - offset) * 26 + 8
+      if (y - Math.min(remainingHeight, fixedHeight + 26 + 8) < 48 ||
+        (offset === 0 && remainingHeight <= PAGE[1] - 183 && y - remainingHeight < 48)) {
+        addPage(); header()
+      }
+      const textY = y - 16 - font.heightAtSize(22, { descender: false })
+      titleLines.forEach((line, i) => page!.drawText(line, { x: LEFT, y: textY - i * 28, size: 22, font, color: INK }))
+      amountLines.forEach((line, i) => page!.drawText(line, { x: RIGHT - font.widthOfTextAtSize(line, 22), y: textY - i * 28, size: 22, font, color: INK }))
+      const metaY = textY - mainHeight
+      metaLines.forEach((line, i) => page!.drawText(line, { x: LEFT, y: metaY - i * 24, size: 18, font, color: MUTED }))
+      const noteY = metaY - metaLines.length * 24 - 8
+      const count = Math.max(1, Math.floor((noteY - 48 - 8) / 26))
+      const lines = noteLines.slice(offset, offset + count)
+      lines.forEach((line, i) => page!.drawText(line, { x: LEFT, y: noteY - i * 26, size: 20, font, color: INK }))
+      offset += lines.length
+      y = noteY - lines.length * 26 - 8
+      page!.drawLine({ start: { x: LEFT, y }, end: { x: RIGHT, y }, thickness: 0.4, color: LINE })
+      if (offset < noteLines.length) { addPage(); header() }
+    } while (offset < noteLines.length)
   }
   const bytes = await pdf.save()
   return new File([new Uint8Array(bytes)], filename, { type: 'application/pdf' })

@@ -2,6 +2,7 @@ import { CalendarDays, Camera, Check, ChevronRight, Delete, Ellipsis, LoaderCirc
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useDragClose } from '../hooks/useDragClose'
+import { Modal } from '../components/Modal'
 import { TypeToggle } from '../components/ui'
 import { clearCapture, peekCapture, type Capture } from '../lib/capture'
 import { ACTIVE_CATEGORIES, CATEGORIES, categories, category, categoryRepo, useCustomCategories } from '../lib/categories'
@@ -58,6 +59,11 @@ function Sheet() {
   const [note, setNote] = useState(existing?.note ?? '')
   const [merchant, setMerchant] = useState(existing?.merchant ?? '')
   const [armDelete, setArmDelete] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [writeError, setWriteError] = useState('')
+  const writing = useRef(false)
+  const [draftId] = useState(() => existing?.id ?? uid())
+  const [createdAt] = useState(() => existing?.createdAt ?? Date.now())
   const [hints, setHints] = useState<Set<Field>>(new Set())
   const [sub, setSub] = useState<'cats' | 'photo'>()
   const [phase, setPhase] = useState<Phase>(capture ? (capture.kind === 'audio' ? 'requesting' : 'busy') : 'idle')
@@ -78,15 +84,15 @@ function Sheet() {
   // history nav is async, so the sheet stays up long enough to take a second tap
   const closing = useRef(false)
   const close = () => {
-    if (closing.current) return
+    if (closing.current || writing.current) return
     closing.current = true
     if (location.state?.bg) navigate(-1)
     else navigate('/', { replace: true })
   }
-  const drag = useDragClose(close)
+  const drag = useDragClose(close, saving)
   const amount = parseAmount(input)
   const working = phase === 'requesting' || phase === 'rec' || phase === 'busy'
-  const canSave = amount > 0 && !!cat && !working && !shrinking
+  const canSave = amount > 0 && !!cat && !working && !shrinking && !saving
   const changed = !existing || photo !== undefined || type !== existing.type || amount !== existing.amount || cat !== existing.category ||
     date !== existing.date || note.trim() !== (existing.note ?? '') || merchant.trim() !== (existing.merchant ?? '')
   const unhint = (f: Field) => setHints((h) => (h.has(f) ? new Set([...h].filter((x) => x !== f)) : h))
@@ -297,27 +303,38 @@ function Sheet() {
     }
   }
 
-  function save() {
-    if (!canSave || !changed || closing.current) return
-    repo.save({
-      id: existing?.id ?? uid(),
-      type,
-      amount,
-      category: cat!,
-      date,
-      note: note.trim() || undefined,
-      merchant: merchant.trim() || undefined,
-      createdAt: existing?.createdAt ?? Date.now(),
-      photoAt: existing?.photoAt,
-    }, photo === null && !existing?.photoAt ? undefined : photo)
-    close()
+  async function save() {
+    if (!canSave || !changed || closing.current || writing.current) return
+    writing.current = true
+    setSaving(true)
+    setWriteError('')
+    try {
+      await repo.save({
+        id: draftId, type, amount, category: cat!, date, note: note.trim() || undefined,
+        merchant: merchant.trim() || undefined, createdAt, photoAt: existing?.photoAt,
+      }, photo === null && !existing?.photoAt ? undefined : photo)
+      writing.current = false
+      close()
+    } catch {
+      setWriteError('Could not confirm saving your entry. Your changes are still here. Try again.')
+    } finally { writing.current = false; if (alive.current) setSaving(false) }
   }
 
-  // two taps: first arms, second deletes
-  function remove() {
+  async function remove() {
+    if (writing.current) return
     if (!armDelete) return setArmDelete(true)
-    if (existing) repo.remove(existing.id)
-    close()
+    if (!existing) return
+    writing.current = true
+    setSaving(true)
+    setWriteError('')
+    try {
+      await repo.remove(existing.id)
+      writing.current = false
+      close()
+    } catch {
+      setWriteError('Could not confirm deletion. Your entry is still shown. Try again.')
+      setArmDelete(false)
+    } finally { writing.current = false; if (alive.current) setSaving(false) }
   }
 
   const h = (f: Field) => (hints.has(f) ? 'hint' : '')
@@ -332,9 +349,10 @@ function Sheet() {
       <div className="row between">
         <label className={`chip ${date !== today() ? 'date-off' : ''} ${h('date')}`} aria-label="Date">
           <CalendarDays size={16} />{dayLabel(date)}
-          <input type="date" aria-label="Date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); unhint('date') } }} />
+          <input type="date" aria-label="Date" disabled={saving} value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); unhint('date') } }} />
         </label>
-        <div className={hints.has('type') ? 'hint-seg' : undefined}><TypeToggle value={type} onChange={switchType} /></div>
+        <div className={hints.has('type') ? 'hint-seg' : undefined}><TypeToggle value={type} onChange={switchType} disabled={saving} /></div>
+        <button className="icon-btn" aria-label="Close entry" disabled={saving} onClick={close}><X size={20} /></button>
       </div>
     </div>
   )
@@ -347,9 +365,9 @@ function Sheet() {
   const keypad = (
     <div className={`keys ${phase === 'failed' ? 'compact' : ''}`}>
       {['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0'].map((k) => (
-        <button key={k} className="key" onClick={() => press(k)}>{k}</button>
+        <button key={k} className="key" disabled={saving} onClick={() => press(k)}>{k}</button>
       ))}
-      <button className="key del" aria-label="Backspace" onClick={() => press('del')}><Delete size={24} /></button>
+      <button className="key del" aria-label="Backspace" disabled={saving} onClick={() => press('del')}><Delete size={24} /></button>
     </div>
   )
   const readingReceipt = (
@@ -414,10 +432,11 @@ function Sheet() {
   const c = cat ? category(cat) : undefined
   const dot = <span className="hint-mark" aria-label="Guessed" />
   return (
-    <div className="sheet-wrap" onClick={close}>
-      <div className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} role="dialog" aria-modal="true" aria-label={existing ? 'Edit entry' : capture ? 'Review entry' : 'Add entry'}
-        style={drag.style} onClick={(e) => e.stopPropagation()}>
+    <>
+      <Modal onDismiss={close} busy={saving} className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} aria-label={existing ? 'Edit entry' : capture ? 'Review entry' : 'Add entry'} style={drag.style}>
         {header}
+        {writeError && <div className="warn" role="alert">{writeError}</div>}
+        {saving && <div className="sr" role="status">{armDelete ? 'Deleting entry…' : 'Saving changes…'}</div>}
         {phase === 'busy' ? readingReceipt : (
           <>
             {existing ? (
@@ -433,11 +452,11 @@ function Sheet() {
             {editAmount ? (
               <div className="review-amount editing"><small>Amount</small>{amountText}</div>
             ) : (
-              <button className="review-amount" onClick={() => setEditAmount(true)}>
+              <button className="review-amount" disabled={saving} onClick={() => setEditAmount(true)}>
                 <small>Amount{hints.has('amount') && <> {dot}</>}</small>{amountText}<span className="edit-cue">Tap to edit</span>
               </button>
             )}
-            <button className="review-category" onClick={() => setSub('cats')}>
+            <button className="review-category" disabled={saving} onClick={() => setSub('cats')}>
               {c ? <span className="cat" style={{ background: c.color }}><c.icon size={24} /></span> : <span className="cat more"><Ellipsis size={24} /></span>}
               <span className="value"><small>Category</small><strong>{c?.label ?? 'Choose category'}</strong></span>
               {hints.has('cat') && dot}
@@ -453,12 +472,12 @@ function Sheet() {
                 <label className="review-row">
                   <span className="tile note"><NotebookPen size={22} /></span>
                   <span className="value"><small>Note</small>
-                    <input value={note} placeholder="Add a note" maxLength={80} onChange={(e) => { setNote(e.target.value); unhint('note') }} />
+                    <input disabled={saving} value={note} placeholder="Add a note" maxLength={80} onChange={(e) => { setNote(e.target.value); unhint('note') }} />
                   </span>
                   {hints.has('note') && dot}
                 </label>
                 {(!capture || capture.kind === 'image') && (
-                  <button className="review-row" onClick={() => (photoUrl ? setSub('photo') : fileRef.current?.click())}>
+                  <button className="review-row" disabled={saving} onClick={() => (photoUrl ? setSub('photo') : fileRef.current?.click())}>
                     {photoUrl ? <img className="tile" src={photoUrl} alt="" /> : <span className="tile add"><Camera size={22} /></span>}
                     <span className="value"><small>Receipt</small><strong>{photoUrl ? 'View photo' : 'Add receipt photo'}</strong></span>
                     <ChevronRight size={16} className="chev" />
@@ -467,23 +486,23 @@ function Sheet() {
                 {photoError && <div className="warn" role="alert"><TriangleAlert size={18} />{photoError}</div>}
                 {existing ? (
                   <div className="edit-bar">
-                    <button className={`round ${armDelete ? 'armed' : 'exp'}`} aria-label={armDelete ? 'Confirm delete' : 'Delete'} onClick={remove}>
+                    <button className={`round ${armDelete ? 'armed' : 'exp'}`} aria-label={armDelete ? 'Confirm delete' : 'Delete'} disabled={saving} onClick={() => void remove()}>
                       <Trash2 size={22} />
                     </button>
-                    <button className="review-save" disabled={!canSave || !changed} onClick={save}>Save changes</button>
+                    <button className="review-save" disabled={!canSave || !changed} onClick={() => void save()}>{saving ? armDelete ? 'Deleting…' : 'Saving…' : 'Save changes'}</button>
                   </div>
                 ) : (
-                  <button className="review-save" disabled={!canSave} onClick={save}>Save entry</button>
+                  <button className="review-save" disabled={!canSave} onClick={() => void save()}>{saving ? 'Saving…' : 'Save entry'}</button>
                 )}
               </>
             )}
           </>
         )}
         {fileInput}
-      </div>
+      </Modal>
       {catSheet}
       {photoSheet}
-    </div>
+    </>
   )
 }
 
@@ -497,7 +516,7 @@ function VoiceView({ phase, orbRef, onFinish, onCancel }: {
       ? ['Connecting microphone', 'Allow microphone access']
       : ['Listening', 'Say the amount and what it was for']
   return (
-    <div className={`voice-mode ${phase}`} role="dialog" aria-modal="true" aria-label="Voice entry">
+    <Modal onDismiss={onCancel} className={`voice-mode ${phase}`} aria-label="Voice entry">
       <div className="vm-title">Voice entry</div>
       <div className="vm-center">
         <div className="orb-wrap" aria-hidden><div ref={orbRef} className="orb" /></div>
@@ -508,7 +527,7 @@ function VoiceView({ phase, orbRef, onFinish, onCancel }: {
         <button className="vm-round finish" aria-label="Finish recording" disabled={phase !== 'rec'} onClick={onFinish}><Check size={26} strokeWidth={2.4} /></button>
         <button className="vm-round cancel" aria-label="Cancel voice entry" onClick={onCancel}><X size={26} strokeWidth={2.4} /></button>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -516,14 +535,12 @@ function VoiceView({ phase, orbRef, onFinish, onCancel }: {
 function SubSheet({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
   const drag = useDragClose(onClose)
   return (
-    <div className="sheet-wrap sub" onClick={(e) => { e.stopPropagation(); onClose() }}>
-      <div className="glass sheet" role="dialog" aria-modal="true" aria-label={label} style={drag.style} onClick={(e) => e.stopPropagation()}>
+    <Modal onDismiss={onClose} className="glass sheet sub" aria-label={label} style={drag.style}>
         <div className="handle" {...drag.handlers}>
           <div className="grab" aria-hidden />
-          <h2 className="sheet-title">{label}</h2>
+          <div className="row between"><h2 className="sheet-title">{label}</h2><button className="icon-btn" aria-label={`Close ${label.toLowerCase()}`} onClick={onClose}><X size={20} /></button></div>
         </div>
         {children}
-      </div>
-    </div>
+    </Modal>
   )
 }
