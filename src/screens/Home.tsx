@@ -1,19 +1,22 @@
 import { ArrowDown, ChevronLeft, ChevronRight, List, Minus, Plus, Wallet } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { TxList } from '../components/ui'
-import { money, monthLabel, shiftMonth, shiftWeek, today, weekLabel, weekStart } from '../lib/format'
-import { currencyAtom, forMonth, forWeek, monthAtom, repo, totals, useAtom, useTransactions } from '../lib/store'
+import { money, monthLabel, shiftMonth, shiftWeek, weekLabel } from '../lib/format'
+import { currencyAtom, deleteFailureAtom, forMonth, forWeek, monthAtom, periodAtom, weekAtom, repo, totals, useAtom, useTransactions } from '../lib/store'
 import type { Tx, TxType } from '../lib/types'
 
 const UNDO_MS = 5_000
 
 export function Home() {
   const all = useTransactions()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [month, setMonth] = useAtom(monthAtom)
   const [symbol] = useAtom(currencyAtom)
   const [filter, setFilter] = useState<TxType | 'all'>('all')
-  const [period, setPeriod] = useState<'week' | 'month'>('month')
-  const [week, setWeek] = useState(() => weekStart(today()))
+  const [period, setPeriod] = useAtom(periodAtom)
+  const [week, setWeek] = useAtom(weekAtom)
   const undo = useUndoDelete()
   const visible = all.filter((x) => x.id !== undo.hidden?.id)
   const periodTxs = period === 'week' ? forWeek(visible, week) : forMonth(visible, month)
@@ -47,21 +50,26 @@ export function Home() {
           <button aria-pressed={period === 'month'} onClick={() => setPeriod('month')}>Month</button>
         </div>
       </div>
-      {txs.length ? <TxList txs={txs} onDelete={undo.remove} /> : <Empty />}
+      {txs.length ? <TxList txs={txs} onDelete={undo.remove} /> : <Empty
+        message={periodTxs.length ? `No ${filter} entries in this period.` : `No transactions for ${period === 'week' ? weekLabel(week) : monthLabel(month)}.`}
+        onAdd={() => navigate('/add', { state: { bg: location } })}
+        onClear={periodTxs.length ? () => setFilter('all') : undefined} />}
       {undo.hidden && (
         <div className="glass undo" role="status">
-          <span>Transaction deleted</span>
-          <button onClick={undo.restore}>Undo</button>
+          <span>{undo.deleting ? 'Deleting entry…' : 'Entry ready to delete'}</span>
+          <button disabled={undo.deleting} onClick={undo.restore}>Undo</button>
         </div>
       )}
     </main>
   )
 }
 
-export function Empty() {
+export function Empty({ message, onAdd, onClear }: { message: string; onAdd: () => void; onClear?: () => void }) {
   return (
     <div className="empty">
-      <div className="big"><Wallet size={40} /></div>
+      <div className="big" aria-hidden><Wallet size={40} /></div>
+      <p role="status">{message}</p>
+      <button className="empty-action" onClick={onClear ?? onAdd}>{onClear ? 'Show all entries' : 'Add entry'}</button>
       <ArrowDown size={26} className="bob" aria-hidden />
     </div>
   )
@@ -70,30 +78,42 @@ export function Empty() {
 /** Hides a deleted row for a few seconds and only then deletes it on the server, so Undo never races the DELETE. */
 function useUndoDelete() {
   const [hidden, setHidden] = useState<Tx>()
+  const [deleting, setDeleting] = useState<string>()
+  const mounted = useRef(true)
   const pending = useRef<{ tx: Tx; timer: ReturnType<typeof setTimeout> }>(null)
   const commit = () => {
     const p = pending.current
     if (!p) return
     clearTimeout(p.timer)
     pending.current = null
-    repo.remove(p.tx.id)
+    if (mounted.current) setDeleting(p.tx.id)
+    void repo.remove(p.tx.id).catch(() => deleteFailureAtom.set(p.tx)).finally(() => {
+      if (mounted.current) {
+        setHidden((current) => current?.id === p.tx.id ? undefined : current)
+        setDeleting((current) => current === p.tx.id ? undefined : current)
+      }
+    })
   }
   useEffect(() => {
+    mounted.current = true
     window.addEventListener('pagehide', commit)
     return () => {
       window.removeEventListener('pagehide', commit)
+      mounted.current = false
       commit()
     }
   }, [])
   return {
     hidden,
+    deleting: !!deleting && deleting === hidden?.id,
     remove(tx: Tx) {
       commit()
-      pending.current = { tx, timer: setTimeout(() => { commit(); setHidden(undefined) }, UNDO_MS) }
+      pending.current = { tx, timer: setTimeout(commit, UNDO_MS) }
       setHidden(tx)
     },
     restore() {
-      if (pending.current) clearTimeout(pending.current.timer)
+      if (!pending.current) return
+      clearTimeout(pending.current.timer)
       pending.current = null
       setHidden(undefined)
     },

@@ -1,16 +1,16 @@
 import { useSyncExternalStore } from 'react'
 import type { Tx } from './types'
-import { monthKey, shiftWeek, today } from './format'
+import { monthKey, shiftWeek, today, weekStart } from './format'
 
 export interface TxRepo {
   list(): Tx[]
   /** photo: a JPEG to attach, null to remove it, undefined to leave it */
-  save(tx: Tx, photo?: Blob | null): void
-  remove(id: string): void
+  save(tx: Tx, photo?: Blob | null): Promise<void>
+  remove(id: string): Promise<void>
   subscribe(fn: () => void): () => void
 }
 
-/** Server-backed; writes are optimistic, and a failed write reloads from the server. */
+/** Server-backed; publish writes only after the server confirms them. */
 function apiRepo(): TxRepo & { load(): Promise<void> } {
   const listeners = new Set<() => void>()
   let cache: Tx[] = []
@@ -25,10 +25,6 @@ function apiRepo(): TxRepo & { load(): Promise<void> } {
     })
   const put = (tx: Tx) =>
     call(tx.id, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(tx) })
-  const reload = (err: unknown) => {
-    console.error('[repo]', err)
-    void repo.load()
-  }
 
   const repo = {
     list: () => cache,
@@ -36,24 +32,22 @@ function apiRepo(): TxRepo & { load(): Promise<void> } {
       await importLocal(put)
       set(await (await call('')).json())
     },
-    save(tx: Tx, photo?: Blob | null) {
-      const saved = photo === null ? { ...tx, photoAt: undefined } : tx
-      set([...cache.filter((t) => t.id !== tx.id), saved])
+    async save(tx: Tx, photo?: Blob | null) {
+      let saved = photo === null ? { ...tx, photoAt: undefined } : tx
+      await put(tx)
       // the photo row points at the transaction, so it goes up only after the transaction exists
-      put(tx)
-        .then(async () => {
-          if (photo === undefined) return
-          if (photo === null) return void await call(`${tx.id}/photo`, { method: 'DELETE' })
-          const { photoAt } = (await (await call(`${tx.id}/photo`, {
-            method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: photo,
-          })).json()) as { photoAt: number }
-          set(cache.map((t) => (t.id === tx.id ? { ...t, photoAt } : t)))
-        })
-        .catch(reload)
+      if (photo === null) await call(`${tx.id}/photo`, { method: 'DELETE' })
+      else if (photo !== undefined) {
+        const { photoAt } = (await (await call(`${tx.id}/photo`, {
+          method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: photo,
+        })).json()) as { photoAt: number }
+        saved = { ...saved, photoAt }
+      }
+      set([...cache.filter((t) => t.id !== tx.id), saved])
     },
-    remove(id: string) {
+    async remove(id: string) {
+      await call(id, { method: 'DELETE' })
       set(cache.filter((t) => t.id !== id))
-      call(id, { method: 'DELETE' }).catch(reload)
     },
     subscribe(fn: () => void) {
       listeners.add(fn)
@@ -147,3 +141,8 @@ export function useAtom<T>(a: Atom<T>): [T, (v: T) => void] {
 
 export const monthAtom = atom('pocket.month', monthKey(today()), false)
 export const currencyAtom = atom('pocket.currency', '$')
+
+export const periodAtom = atom<'week' | 'month'>('pocket.period', 'month', false)
+export const weekAtom = atom('pocket.week', weekStart(today()), false)
+
+export const deleteFailureAtom = atom<Tx | undefined>('pocket.delete-error', undefined, false)

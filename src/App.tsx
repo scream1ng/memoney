@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, type Location } from 'react-router-dom'
 import { isAdmin } from './lib/access'
 import { Usage } from './screens/Usage'
@@ -6,7 +6,7 @@ import { Dock } from './components/ui'
 import { PasskeyPrompt } from './components/PasskeyPrompt'
 import { authClient } from './lib/auth'
 import { categoryRepo } from './lib/categories'
-import { repo } from './lib/store'
+import { deleteFailureAtom, repo, useAtom } from './lib/store'
 import { AddSheet } from './screens/AddSheet'
 import { Home } from './screens/Home'
 import { Login } from './screens/Login'
@@ -22,9 +22,16 @@ function Shell() {
   const admin = isAdmin(data?.user)
   // sheet routes render over the page they were opened from
   const bg = (location.state as { bg?: Location } | null)?.bg
+  const page = bg ?? location
+  const scrollPositions = useRef(new Map<string, number>())
+  useLayoutEffect(() => {
+    const positions = scrollPositions.current
+    window.scrollTo({ top: positions.get(page.key) ?? 0, behavior: 'instant' })
+    return () => { positions.set(page.key, window.scrollY) }
+  }, [page.key])
   return (
     <>
-      <Routes location={bg ?? location}>
+      <Routes location={page}>
         <Route path="/" element={<Home />} />
         <Route path="/stats" element={<Stats exportOpen={exportAt === location.key} onCloseExport={() => setExportAt(undefined)} />} />
         <Route path="/admin" element={<Navigate to={admin ? '/settings/admin' : '/settings'} replace />} />
@@ -41,10 +48,29 @@ function Shell() {
           <Route path="/tx/:id" element={<AddSheet />} />
         </Routes>
       )}
+      <DeleteFailureNotice />
       <Dock onExport={() => setExportAt(location.key)} onAddCategory={() => setAddCategoryRequest((n) => n + 1)} />
       {data?.user && <PasskeyPrompt key={data.user.id} userId={data.user.id} />}
     </>
   )
+}
+
+function DeleteFailureNotice() {
+  const [failed, setFailed] = useAtom(deleteFailureAtom)
+  const [pending, setPending] = useState(false)
+  if (!failed) return null
+  const retry = async () => {
+    if (pending) return
+    setPending(true)
+    try { await repo.remove(failed.id); setFailed(undefined) }
+    catch { /* retain the visible error and retry action */ }
+    finally { setPending(false) }
+  }
+  return <div className="glass write-notice" role="alert">
+    <p>Could not confirm deletion. Your entry is still shown.</p>
+    <div className="row"><button disabled={pending} onClick={() => void retry()}>{pending ? 'Deleting…' : 'Retry delete'}</button>
+      <button disabled={pending} onClick={() => setFailed(undefined)}>Dismiss</button></div>
+  </div>
 }
 
 const IDLE_MS = 15 * 60_000

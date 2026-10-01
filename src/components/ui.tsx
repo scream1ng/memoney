@@ -217,13 +217,13 @@ function SwipeRow({ open, onOpen, onDelete, onTap, label, children }: {
   )
 }
 
-export function TypeToggle({ value, onChange }: { value: TxType; onChange: (t: TxType) => void }) {
+export function TypeToggle({ value, onChange, disabled = false }: { value: TxType; onChange: (t: TxType) => void; disabled?: boolean }) {
   return (
     <div className="seg" role="group">
-      <button className="e" aria-label="Expense" aria-pressed={value === 'expense'} onClick={() => onChange('expense')}>
+      <button className="e" disabled={disabled} aria-label="Expense" aria-pressed={value === 'expense'} onClick={() => onChange('expense')}>
         <MinusIcon />
       </button>
-      <button className="i" aria-label="Income" aria-pressed={value === 'income'} onClick={() => onChange('income')}>
+      <button className="i" disabled={disabled} aria-label="Income" aria-pressed={value === 'income'} onClick={() => onChange('income')}>
         <Plus size={18} strokeWidth={2.6} />
       </button>
     </div>
