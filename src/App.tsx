@@ -73,10 +73,10 @@ function DeleteFailureNotice() {
   </div>
 }
 
-const IDLE_MS = 15 * 60_000
+const IDLE_MS = 8 * 60 * 60_000
 const ACTIVE_KEY = 'memoney.active'
 
-/** Signs out after 15 minutes without a tap or keypress, counting time the app was closed or in the background. */
+/** Signs out after 8 hours without a tap or keypress, counting time the app was closed or in the background. */
 function useIdleLogout(sessionId: string | undefined) {
   useEffect(() => {
     if (!sessionId) return
