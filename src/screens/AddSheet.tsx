@@ -441,9 +441,9 @@ function Sheet() {
           <>
             {existing ? (
               (merchant || photoUrl) && <div className="review-source">{[merchant, photoUrl && 'receipt attached'].filter(Boolean).join(' · ')}</div>
-            ) : capture ? (
+            ) : capture && source === 'image' ? (
               <div className="review-source">
-                {source === 'image' ? 'From your receipt' : 'From your voice'}{merchant && ` · ${merchant}`}
+                From your receipt{merchant && ` · ${merchant}`}
                 {!!hints.size && <> · {dot} = our guess, tap to change</>}
               </div>
             ) : null}
