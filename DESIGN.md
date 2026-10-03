@@ -10,6 +10,7 @@ All styles live in `src/styles.css`, with shared components in `src/components/u
 |---|---|---|
 | `--bg` | `#f2f2f7` | page background, `theme-color` |
 | `--card` | `#fff` | cards, rows, keys, round buttons |
+| `--shell` | `#dcdce2` | desktop web only: the sidebar background behind the inset main card |
 | `--ink` | `#000` | primary text |
 | `--muted` | `#6c6c70` | secondary text, placeholders, inactive tabs, disabled |
 | `--sep` | `#c6c6c8` | 0.5px hairlines between rows |
@@ -141,6 +142,71 @@ Icons are `lucide-react`: 18–22px inline, 24px in 52px tiles, 28px in the FAB.
 - Currency, Report Export, and Category editor close buttons are now 44px. Category color choices wrap into four columns below 380px and stay at least 44×44px.
 - `.orb` in Voice mode uses a gradient despite the no-gradients rule above.
 
+
+## Desktop web (≥820px)
+
+`useDesktop()` (≥820px) picks the web UI in `App.tsx`. Signed out shows `Landing` (`.web-landing`, `.wl-*`). Signed in shows `WebShell` (`.web`, `.wd-*`). Below 820px the phone UI is unchanged. The web UI uses the same tokens, routes, atoms and data as the phone. Its styles are the `web landing` / `web dashboard` blocks in `src/styles.css`.
+
+### Layout
+- Shell: a 232px sidebar (200px at ≤1180px) sits on `--shell`. Main is an inset card: 8px margin (none on the left), 16px radius, `--bg` fill and a 0.5px `--sep` ring. It is the only thing that scrolls.
+- Page: `.wd-page` > `.wd-top` (padding 20/28/0; h1 30px/700 with `margin-right:auto`, so the actions sit on the right) > `.wd-body` (a grid with 20/28/28 padding and 16px gaps).
+- Breakpoint 1180px: two-column bodies (Reports, Review) collapse, and 4-up KPIs go to 2 columns.
+- Sidebar order: Overview, Reports, Categories, Settings, then Admin (admins only, `ShieldCheck`). The account button at the foot opens a menu with Settings and Sign out.
+
+### Type (web additions)
+| Size | Weight | Where |
+|---|---|---|
+| 46px | 700, −1.5px | landing tagline |
+| 40px | 700, −1px | Reports total income |
+| 34px | 700, −1px | KPI value, entry-form amount |
+| 30px | 700, −0.5px | page title |
+| 24px | 700, −0.5px | Reports Expense/Remaining metrics |
+| 20px | 700 | entry panel title |
+| 15px | 400/600 | nav, table body, buttons |
+| 13px | 600 uppercase | KPI label, table header, card section title |
+
+### Components
+| Component | Class / file | States |
+|---|---|---|
+| Nav item (44px) | `.wd-nav` (NavLink) | `.on` = `--card` fill + accent text/icon; icons muted otherwise |
+| Account menu | `AccountMenu` in `WebShell.tsx`, `.wd-acct` `.wd-me` `.wd-menu` | button `aria-expanded`; menu opens above the name; closes on Esc (focus returns), outside click, or choice; first item focused on open |
+| Button (44px pill) | `.wd-btn` | `.primary` accent; `:disabled` opacity .5; `.danger` exp text → `.armed` exp fill (two-step delete); pending shows `LoaderCircle.spin` + "…ing" label |
+| Period control | `PeriodControl` (`.wd-period`) | Week/Month seg + arrows + label; shared atoms with phone. Admin reuses the layout with Weekly/Monthly and a date range (`.wd-range`) |
+| KPI card | `.card.wd-kpi` in `.wd-kpis` (3-up) / `.wd-kpis4` (4-up) | value `.num` 34px, ellipsis; uppercase label; muted sub-line |
+| Data table | `.card.wd-table` + `.wd-table-head` (search + filter) | rows: hover fill, `.sel` accent 8%, focus-visible inset ring, Enter/Space opens. `.wd-usage` = read-only (no hover/pointer), right-aligned `.n` columns, `tr.idle` muted |
+| Search field (44px) | `.wd-search` | focus-within accent outline; input 16px |
+| Empty / no match | `.wd-empty` | text + accent "Show all" button that clears the filters |
+| Footer tip | `.wd-tip` | 13px muted, hairline above |
+| Entry panel | `EntryPanel` → `Modal.sheet.wd-panel` (440px floating card, 8px inset, 16px radius) | opens over the page via `location.state.bg`; New entry / Edit entry; saving disables everything; save errors keep the draft |
+| Entry form | `EntryForm` (`.wd-ef`) | used for New, Edit and Review receipts; `.wd-typeseg`, `.wd-in`, `.wd-amt`, `.wd-cgrid` (4 columns, ring on the selected one); guessed fields get `.hint-mark` |
+| Review receipts | `Review` (`.wd-layer`, `.wd-rv`) | full-window layer: queue / photo / form; queue items `.saved` inc, `.check` accent, `.failed`/`.broken` exp |
+| Drop overlay | `.wd-dropover` | shown only for file drags with no dialog open (`acceptsDrop`) |
+| Toast | `.warn.wd-toast` | fixed at the bottom centre; auto-dismisses after 6s |
+| Reports cards | `.wd-rcard`, `.wd-stack`, `.wd-lg`, `.wd-metrics`, `.wd-erow` | mirrors phone Stats; empty: "No income/expenses this period" |
+| Share bar | `.wd-share` (90px `.bar`, accent fill) | Admin share of cost; idle rows show "No activity" |
+| Category columns | `.wd-cols` `.wd-ccol` `.wd-crow` | Built in, then Your categories; editing uses the phone `CategoryModal` (centred on web) |
+| Settings rows | `.wd-sec` `.wd-srow` `.wd-select` | native select styled as a fill pill with a chevron |
+
+### Shadow (web)
+Floating elements reuse the **thumb** level (0.5px `--sep` ring + `0 4px 12px rgba(0,0,0,.12)`): the account menu, the toast, the review photo and the landing phone. The entry panel uses the glass drop shadow (`0 8px 24px`). The main card has only a 0.5px ring. Cards in pages still have no shadow.
+
+### Do / Don't (web)
+- **Do** put page actions in `.wd-top`, right-aligned, with the primary one last.
+- **Do** open New/Edit entry as the right panel over the current page. Never navigate away.
+- **Do** keep the 44px minimum for every web control and 16px for inputs, as on the phone.
+- **Do** reuse the phone's logic and copy (Stats math, empty texts, usage wording). The web is a layout, not a fork.
+- **Do** gate admin UI on `isAdmin()`. `/admin` sends non-admins to Overview.
+- **Don't** add web-only tokens beyond `--shell`.
+- **Don't** let `.wd-page` scroll on its own. `.wd-main` is the single scroll container.
+- **Don't** use the phone dock, FAB, keypad or bottom sheets on desktop.
+
+### Known drift (web)
+- `.wd-count` and `.wd-notice` are declared twice in `styles.css`.
+- `.wd-typeseg` uses a 12px track with 10px buttons, while the phone `.seg` is a 999px pill.
+- `.wl-paper` hardcodes a `#fff` background instead of `--card`.
+- At 820–1180px the `.wd-top` actions wrap onto a second, left-aligned line (Overview, Reports).
+- Settings appears both in the sidebar and in the account menu (open decision).
+- The receipt `<img>` radius (6px) is outside the phone radius table.
 
 ## Export layout
 

@@ -5,10 +5,8 @@ import { Modal } from '../components/Modal'
 import { useDragClose } from '../hooks/useDragClose'
 import { Usage } from './Usage'
 import { authClient } from '../lib/auth'
+import { CURRENCIES, CURRENCY_NAMES } from '../lib/currencies'
 import { currencyAtom, useAtom } from '../lib/store'
-
-const CURRENCIES = ['', '฿', '$', '€', '£', '¥', '₫', 'RM']
-const CURRENCY_NAMES = ['None', 'Thai baht', 'US dollar', 'Euro', 'British pound', 'Japanese yen', 'Vietnamese dong', 'Malaysian ringgit']
 
 export function Settings({ admin }: { admin: boolean }) {
   const navigate = useNavigate()

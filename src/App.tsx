@@ -13,6 +13,9 @@ import { Login } from './screens/Login'
 import { Settings } from './screens/Settings'
 import { Categories } from './screens/Categories'
 import { Stats } from './screens/Stats'
+import { useDesktop } from './lib/useDesktop'
+import { Landing } from './web/Landing'
+import { WebShell } from './web/WebShell'
 
 function Shell() {
   const location = useLocation()
@@ -118,6 +121,7 @@ function useIdleLogout(sessionId: string | undefined) {
 export default function App() {
   const { data, isPending } = authClient.useSession()
   const userId = data?.user.id
+  const desktop = useDesktop()
   useIdleLogout(data?.session.id)
   useEffect(() => {
     if (userId) {
@@ -126,5 +130,6 @@ export default function App() {
     }
   }, [userId])
   if (isPending) return null
-  return <HashRouter>{userId ? <Shell /> : <Login />}</HashRouter>
+  // desktop browsers get the landing page and web dashboard; phones and the installed app keep the mobile UI
+  return <HashRouter>{userId ? desktop ? <WebShell /> : <Shell /> : desktop ? <Landing /> : <Login />}</HashRouter>
 }

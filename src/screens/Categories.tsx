@@ -5,7 +5,7 @@ import { useDragClose } from '../hooks/useDragClose'
 import { ACTIVE_CATEGORIES, COLORS, ICONS, categoryRepo, useCustomCategories } from '../lib/categories'
 import type { CustomCategory, TxType } from '../lib/types'
 
-type Draft = Omit<CustomCategory, 'id'> & { id?: string }
+export type Draft = Omit<CustomCategory, 'id'> & { id?: string }
 const REVEAL = 96
 const COLOR_NAMES = ['Green', 'Amber', 'Indigo', 'Blue', 'Orange', 'Pink', 'Purple']
 
@@ -103,7 +103,7 @@ export function Categories({ addRequest }: { addRequest: number }) {
   )
 }
 
-function CategoryModal({ draft, pending, error, deleteReady, onChange, onClose, onSave, onDelete }: {
+export function CategoryModal({ draft, pending, error, deleteReady, onChange, onClose, onSave, onDelete }: {
   draft: Draft; pending: boolean; error: string; deleteReady: boolean; onChange: (draft: Draft) => void
   onClose: () => void; onSave: (e: React.FormEvent) => void; onDelete: () => void
 }) {

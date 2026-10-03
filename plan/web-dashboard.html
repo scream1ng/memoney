@@ -1,0 +1,365 @@
+<!doctype html>
+<!--
+Web dashboard prototype v3, 2026-10-03. v3 changes from v2: inset-card shell; Overview is the list (like phone Home); Reports is the charts (like phone Stats) with downloads.
+v2 replaced v1 after review: too many upload entry points, a whole Upload page, and phone UI inside the desktop frame.
+- Desktop web (>= 820px) after sign-in. Phones/installed app keep the current mobile UI unchanged. Same account + data.
+- Shell: sidebar sits on the gray page background (no card of its own); the page content is one rounded card inset 8px. Sidebar = Overview, Reports, Categories, Settings; account at bottom.
+- Upload has ONE button and ONE gesture:
+  - "Add receipts" (primary, Overview top bar) opens the file picker.
+  - Dropping image files anywhere in the window shows a full-window "Drop to add receipts" overlay.
+  - Either one opens the Review receipts view. No drop cards, no Upload page.
+- Review receipts: a full-window layer over the dashboard (not a page, not in the nav).
+  - Top bar: title, "2 of 5 saved", Add more, Close.
+  - Left: receipt list with status (Reading… / Check / Saved / Skipped / Can't open). Middle: the photo. Right: the desktop entry form.
+  - Never auto-saves: Save entry (Enter) or Skip, then it moves to the next receipt. Closing with unchecked receipts keeps them.
+  - Overview then shows one "3 receipts to check" pill in its top bar, which reopens the view. The pill is hidden when there's nothing to check.
+- Desktop entry form, one component for New entry, Edit entry and receipt review:
+  - Expense/Income segmented control with words.
+  - Amount: a typed field with the currency prefix.
+  - Date: date field. Note: text field.
+  - Category: always-visible grid of the active categories plus the user's own; the selected one gets the ring.
+  - Receipt: thumbnail with Replace / Remove, or "Attach photo".
+  - Guessed values keep the blue hint dot beside the label.
+  - Footer: Delete (edit only, two-step), Cancel, Save. Enter saves; Esc closes.
+- New/Edit entry use the form in a right-side panel over Overview. The phone sheet and keypad are not used on desktop.
+- Categories: Expense and Income side by side, each with built-ins + "Your categories" + its own Add button. Add/edit opens the existing category dialog.
+- Settings:
+  - Account: name, email, "Signed in with Google", Sign out.
+  - Preferences: Currency as a select.
+  - No API usage card (admins get the Admin page).
+  - No passkey row, and no Categories link (it's in the sidebar).
+- Overview (like phone Home): Income / Expense / Remaining totals + the full-width entry list. No charts here.
+- Reports (like phone Stats), same period control as Overview:
+  - Top bar: period, Download CSV, Download PDF (primary). No PDF preview, no Print.
+  - Income card: total, one stacked bar split by income category, legend with amount and % of income; then Expense and Remaining with % of income.
+  - Expense by category: icon, name, %, amount, bar (longest = biggest), sorted biggest first.
+  - Empty period: "No income this period" / "No expenses this period", same as the phone.
+- Visual rules: real ../src/styles.css tokens, plain cards without shadow, hairline separators. No gradients, no new radii/shadows.
+- Admin (sidebar item below Settings, admins only; /admin redirects others to Overview). Uses the existing /api/usage/admin data, no backend change:
+  - Top bar: Weekly / Monthly, prev / next with the date range (back up to 120 periods), Refresh.
+  - Totals: estimated cost (USD), camera calls, voice calls, active accounts (with any call) of all accounts.
+  - Unpriced calls: warning that the total is partial and how many calls are left out.
+  - Accounts table, highest cost first: avatar, name + email, camera, voice, estimated cost (* when partial), share of total cost as a bar. Search by name or email. Accounts with no calls stay listed, dimmed.
+  - Loading, error with Retry, "No API activity recorded for this period."
+  - Footnote: new activity only; voice may use two calls; costs are estimates.
+Open: wording; a daily cost chart would need a new endpoint; PDFs (e-receipts) in upload; tablet widths 820–1180px.
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MeMoney · Web dashboard v3</title><link rel="stylesheet" href="../src/styles.css"><style>
+html{height:auto!important;overflow-y:auto!important}body{height:auto!important;overflow:visible!important;padding:20px}
+.pv-tabs{display:flex;gap:8px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+.pv-tabs button{min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);font-size:14px}
+.pv-tabs button[aria-pressed=true]{background:var(--ink);color:var(--card)}
+.frame{width:1280px;height:800px;margin:0 auto;border-radius:16px;overflow:hidden;box-shadow:0 0 0 0.5px var(--sep),0 4px 12px rgba(0,0,0,.12);background:#dcdce2;display:grid;grid-template-columns:232px 1fr;position:relative}
+.frame [hidden]{display:none!important}
+@media (max-width:1320px){.frame{zoom:.82}}
+/* sidebar */
+.side{padding:20px 12px;display:flex;flex-direction:column;gap:4px}
+.side .brand{flex-direction:row;justify-content:flex-start;padding:0 8px 16px;gap:10px;font-size:20px}.side .brand img{width:32px;height:32px}
+.nav{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border-radius:12px;color:var(--ink);font-size:15px;font-weight:500;width:100%;text-align:left}
+.nav svg{color:var(--muted)}.nav.on{background:var(--card);color:var(--accent)}.nav.on svg{color:var(--accent)}
+.side .me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px;font-size:14px}
+.avatar{width:32px;height:32px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);display:grid;place-items:center;font-weight:600;font-size:14px;flex:none}
+.avatar.lg{width:48px;height:48px;font-size:20px}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;overflow:hidden;margin:8px 8px 8px 0;border-radius:16px;background:var(--bg);box-shadow:0 0 0 0.5px var(--sep)}
+.top{display:flex;align-items:center;gap:12px;padding:20px 28px 0}
+.top h1{font-size:30px;font-weight:700;letter-spacing:-.5px;margin-right:auto}
+.period{display:flex;align-items:center;gap:6px}.period .seg button{width:auto;padding:0 16px}
+.period .lbl{font-size:15px;font-weight:600;min-width:120px;text-align:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 16px;border-radius:999px;background:var(--fill);font-size:15px;font-weight:600;white-space:nowrap}
+.btn.pri{background:var(--accent);color:var(--accent-ink)}
+.btn.danger{background:none;color:var(--exp);padding:0 8px}
+.btn.danger.armed{background:var(--exp);color:#fff;padding:0 16px}
+.pill{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:14px;font-weight:600}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.body{flex:1;min-height:0;padding:20px 28px 28px;display:grid;gap:16px}
+.muted{color:var(--muted)}
+/* overview */
+.ov{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+.kpis{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.kpi{padding:16px 20px}.kpi small{display:block;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase}.kpi .num{font-size:34px;font-weight:700;letter-spacing:-1px}.kpi .sub{font-size:13px;color:var(--muted)}
+.tbl{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.tbl-head{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.search{flex:1;height:44px;border-radius:12px;background:var(--fill);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--muted);font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{font-size:13px;font-weight:600;color:var(--muted);text-align:left;padding:8px 16px;text-transform:uppercase}
+td{padding:10px 16px;border-top:0.5px solid var(--sep);vertical-align:middle}
+tr.sel td{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+td .cat{width:32px;height:32px;border-radius:10px}
+.cc{display:flex;align-items:center;gap:10px}
+td.amt,th.amt{text-align:right}
+.bars{padding:16px;display:grid;gap:12px;align-content:start}.bars h2{font-size:15px;font-weight:600}
+.barrow{display:grid;grid-template-columns:1fr auto;gap:4px 8px;font-size:14px}
+.barrow .bar{grid-column:1/-1;height:6px;border-radius:4px;background:var(--fill);overflow:hidden;margin:0}.barrow .bar i{display:block;height:100%;border-radius:4px}
+.tbl-foot{margin-top:auto;padding:12px 16px;border-top:0.5px solid var(--sep);font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+/* scrim + panel */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.15)}
+.panel{position:absolute;top:8px;right:8px;bottom:8px;width:420px;border-radius:16px;overflow:hidden;background:var(--bg);box-shadow:0 0 0 0.5px var(--sep),0 8px 24px rgba(0,0,0,.12);display:flex;flex-direction:column}
+.panel-head{display:flex;align-items:center;gap:12px;padding:16px 20px 8px}.panel-head h2{font-size:20px;font-weight:700;margin-right:auto}
+.panel .ef{padding:8px 20px;overflow:auto;flex:1}
+/* desktop entry form */
+.ef{display:flex;flex-direction:column;gap:14px}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld>span{font-size:13px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px}
+.in{height:44px;border-radius:12px;background:var(--card);box-shadow:inset 0 0 0 0.5px var(--sep);display:flex;align-items:center;gap:8px;padding:0 12px;font-size:16px;color:var(--ink)}
+.in.focus{box-shadow:inset 0 0 0 2px var(--accent)}
+.in.amt{height:64px;font-size:34px;font-weight:700;letter-spacing:-1px}.in.amt .cur{color:var(--muted);font-weight:600}
+.in.amt.exp{color:var(--ink)}.in.amt.inc{color:var(--inc)}
+.in .caret{width:2px;height:36px;background:var(--accent);margin-left:-6px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.typeseg{display:grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:12px;background:var(--fill);height:44px}
+.typeseg button{border-radius:10px;font-size:15px;font-weight:600;color:var(--muted)}
+.typeseg button[aria-pressed=true]{background:var(--card);box-shadow:0 1px 4px rgba(0,0,0,.12);color:var(--ink)}
+.typeseg .e[aria-pressed=true]{color:var(--exp)}.typeseg .i[aria-pressed=true]{color:var(--inc)}
+.cgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.cgrid button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border-radius:12px;font-size:12px;font-weight:500}
+.cgrid button:hover{background:var(--fill)}
+.cgrid .cat{width:36px;height:36px;border-radius:11px}
+.cgrid button[aria-pressed=true] .cat{box-shadow:0 0 0 2.5px var(--bg),0 0 0 5px var(--accent)}
+.rcpt{display:flex;align-items:center;gap:12px;padding:8px;border-radius:12px;background:var(--card);box-shadow:inset 0 0 0 0.5px var(--sep)}
+.rcpt img{width:36px;height:48px;border-radius:6px;box-shadow:0 0 0 0.5px var(--sep)}
+.rcpt .t{flex:1;font-size:15px}.rcpt .lnk{color:var(--accent);font-size:14px;font-weight:600;padding:0 6px}
+.rcpt.empty{justify-content:center;color:var(--accent);font-weight:600;font-size:15px;min-height:52px;box-shadow:inset 0 0 0 1px var(--sep)}
+.foot{display:flex;align-items:center;gap:8px;padding:12px 20px 16px;border-top:0.5px solid var(--sep)}
+.foot .grow{margin-right:auto}
+.kbd{font-size:12px;color:var(--muted)}
+kbd{font:inherit;font-size:12px;padding:1px 6px;border-radius:5px;background:var(--fill)}
+/* drop overlay */
+.dropover{position:absolute;inset:0;background:color-mix(in srgb,var(--bg) 82%,transparent);display:grid;place-items:center}
+.dropover div{position:absolute;inset:16px;border-radius:24px;outline:3px dashed color-mix(in srgb,var(--accent) 50%,transparent);outline-offset:-3px;background:color-mix(in srgb,var(--accent) 6%,transparent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--accent)}
+.dropover strong{font-size:24px}.dropover small{font-size:15px;color:var(--muted)}
+/* review layer */
+.layer{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column}
+.layer .top{padding:16px 24px 0}.layer .top h1{font-size:24px;margin-right:0}
+.layer .top .count{margin-right:auto;font-size:15px}
+.rv{grid-template-columns:260px 1fr 400px;padding:16px 24px 24px}
+.queue{padding:8px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.qi{display:flex;align-items:center;gap:12px;padding:8px;border-radius:12px;text-align:left;width:100%}
+.qi.on{background:var(--fill)}
+.qi img{width:36px;height:48px;border-radius:6px;object-fit:cover;box-shadow:0 0 0 0.5px var(--sep)}
+.qi .t{font-size:15px;font-weight:500}.qi .s{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.qi .s.ok{color:var(--inc)}.qi .s.chk{color:var(--accent)}.qi .s.bad{color:var(--exp)}
+.photo-view{display:grid;place-items:center;padding:20px;overflow:hidden}
+.photo-view img{max-height:100%;max-width:100%;border-radius:10px;box-shadow:0 0 0 0.5px var(--sep),0 4px 12px rgba(0,0,0,.12)}
+.rv-form{display:flex;flex-direction:column;min-height:0}
+.rv-form .ef{flex:1;overflow:auto;padding:4px 2px}
+.rv-form .foot{padding:12px 0 0}
+.src{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.src span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+/* reports */
+.rp{grid-template-columns:1fr 1fr;align-content:start;overflow:auto}
+.rcard{padding:20px;display:flex;flex-direction:column;gap:14px;align-self:start}
+.rcard h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase}
+.big{font-size:40px;font-weight:700;letter-spacing:-1px;line-height:1.1}
+.stack{display:flex;height:12px;border-radius:6px;overflow:hidden;gap:2px;background:var(--fill)}.stack i{display:block;height:100%}
+.legend{display:grid;gap:10px}
+.lg{display:grid;grid-template-columns:1fr auto;gap:0 8px;font-size:15px}.lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px}
+.lg small{grid-column:1/-1;color:var(--muted);font-size:13px;padding-left:18px}
+.metrics{display:grid;grid-template-columns:1fr 1fr;border-top:0.5px solid var(--sep);padding-top:14px;gap:12px}
+.metrics span{display:block;font-size:13px;color:var(--muted)}.metrics b{display:block;font-size:24px;font-weight:700;letter-spacing:-.5px}.metrics small{font-size:13px;color:var(--muted)}
+.erow{display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;align-items:center;font-size:15px;padding:10px 0;border-top:0.5px solid var(--sep)}
+.erow:first-of-type{border-top:0}
+.erow .cat{width:32px;height:32px;border-radius:10px;grid-row:span 2}
+.erow .bar{grid-column:2/-1;height:6px;border-radius:4px;background:var(--fill);overflow:hidden;margin:0}.erow .bar i{display:block;height:100%;border-radius:4px}
+.ehead{display:flex;align-items:baseline;justify-content:space-between}
+/* admin */
+.adm{grid-template-rows:auto auto 1fr}
+.adm .kpis{grid-template-columns:repeat(4,1fr)}
+.range{font-size:15px;font-weight:600;min-width:200px;text-align:center}
+.utbl td.n,.utbl th.n{text-align:right;font-variant-numeric:tabular-nums}
+.utbl .who{display:flex;align-items:center;gap:10px}.utbl .who small{display:block;color:var(--muted);font-size:13px}
+.utbl tr.idle td{color:var(--muted)}.utbl tr.idle .avatar{opacity:.5}
+.share{display:flex;align-items:center;gap:8px;justify-content:flex-end}.share .bar{width:90px;height:6px;border-radius:4px;background:var(--fill);overflow:hidden;margin:0}.share .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.share small{width:34px;text-align:right;color:var(--muted)}
+.foot-note{font-size:13px;color:var(--muted);padding:12px 16px;border-top:0.5px solid var(--sep)}
+/* categories */
+.cols{grid-template-columns:1fr 1fr;align-content:start}
+.ccol{padding:8px 0;align-self:start}
+.ccol-head{display:flex;align-items:center;gap:8px;padding:8px 16px 12px}.ccol-head h2{font-size:17px;font-weight:700;margin-right:auto}
+.ccol h3{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;padding:12px 16px 6px}
+.crow{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 16px;border-top:0.5px solid var(--sep);font-size:15px;width:100%;text-align:left}
+.crow .cat{width:32px;height:32px;border-radius:10px}.crow .grow{margin-right:auto}
+.crow.empty{color:var(--muted);font-size:14px}
+/* settings */
+.set{grid-template-columns:minmax(0,640px);align-content:start}
+.sec{padding:8px 0}.sec h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;padding:8px 20px}
+.srow{display:flex;align-items:center;gap:14px;min-height:60px;padding:8px 20px;border-top:0.5px solid var(--sep);font-size:15px}
+.srow .grow{margin-right:auto}.srow small{display:block;color:var(--muted);font-size:13px}
+.select{height:40px;border-radius:10px;background:var(--fill);display:inline-flex;align-items:center;gap:8px;padding:0 12px;font-size:15px;font-weight:500}
+</style></head><body>
+<nav class="pv-tabs">
+  <button data-v="overview">Overview</button><button data-v="drop">Drop anywhere</button><button data-v="review">Review receipts</button>
+  <button data-v="pending">Overview · 3 to check</button><button data-v="edit">Edit entry</button><button data-v="add">New entry</button>
+  <button data-v="reports">Reports</button><button data-v="cats">Categories</button><button data-v="settings">Settings</button><button data-v="admin">Admin</button>
+</nav>
+<div class="frame" id="frame"></div>
+<script>
+const P = {
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>', minus:'<path d="M5 12h14"/>', x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', check:'<path d="M20 6 9 17l-5-5"/>',
+  house:'<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  upload:'<path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  grid:'<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  left:'<path d="m15 18-6-6 6-6"/>', right:'<path d="m9 18 6-6-6-6"/>', down:'<path d="m6 9 6 6 6-6"/>', list:'<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>', printer:'<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+  download:'<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>', trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  food:'<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
+  bag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+  brief:'<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>',
+  zap:'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  dots:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  gift:'<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>', shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>', refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>', trend:'<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>', coffee:'<path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/>',
+  cal:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+  clip:'<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>',
+  spin:'<path d="M21 12a9 9 0 1 1-6.219-8.56"/>', out:'<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+  img:'<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>', imgoff:'<path d="M2 2 22 22"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><path d="M13.5 13.5 6 21"/><path d="M18 12 21 15"/><path d="M3.59 3.59A2 2 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.05-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/>',
+}
+const i = (n, s = 20, w = 2, cls = '') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" class="${cls}" aria-hidden="true">${P[n]}</svg>`
+const CAT = { food:['Food','#c93400','food'], shopping:['Shopping','#ff2d55','bag'], bills:['Bills','#af52de','zap'], transport:['Transport','#007aff','car'], other:['Other','#8e8e93','dots'], coffee:['Coffee','#a2845e','coffee'],
+  salary:['Salary','#248a3d','brief'], gift:['Gift','#ff9500','gift'], invest:['Invest','#5856d6','trend'] }
+const EXP = ['coffee','food','shopping','bills','transport','other'], INC = ['salary','gift','invest']
+const receipt = (w = 64, h = 84) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 84" width="${w}" height="${h}"><rect width="64" height="84" fill="#fff"/><g fill="#c6c6c8"><rect x="12" y="8" width="40" height="5"/><rect x="12" y="20" width="26" height="3"/><rect x="44" y="20" width="8" height="3"/><rect x="12" y="27" width="20" height="3"/><rect x="44" y="27" width="8" height="3"/><rect x="12" y="34" width="28" height="3"/><rect x="44" y="34" width="8" height="3"/><rect x="12" y="41" width="18" height="3"/><rect x="44" y="41" width="8" height="3"/></g><rect x="12" y="56" width="16" height="5" fill="#6c6c70"/><rect x="38" y="56" width="14" height="5" fill="#6c6c70"/><g fill="#c6c6c8"><rect x="12" y="70" width="40" height="2"/></g></svg>`)
+const money = (n) => '฿' + n.toLocaleString('en-US')
+const TX = [
+  { d:'Oct 3', cat:'shopping', m:"Lotus's", note:'ของใช้ในบ้าน', amt:349, photo:true },
+  { d:'Oct 3', cat:'food', note:'ชานม', amt:26 },
+  { d:'Oct 2', cat:'food', note:'ข้าวมันไก่', amt:60 },
+  { d:'Oct 2', cat:'transport', note:'BTS', amt:45 },
+  { d:'Oct 2', cat:'bills', m:'MEA', note:'ค่าไฟ กันยายน', amt:1280, photo:true },
+  { d:'Oct 1', cat:'food', m:'Starbucks', note:'Latte', amt:145, photo:true },
+  { d:'Oct 1', cat:'transport', note:'Grab', amt:189 },
+  { d:'Oct 1', cat:'salary', note:'October', amt:18000, inc:true },
+  { d:'Oct 1', cat:'invest', note:'Dividend', amt:1200, inc:true },
+  { d:'Sep 30', cat:'gift', note:'Birthday', amt:800, inc:true },
+]
+const income = TX.filter(t=>t.inc).reduce((s,t)=>s+t.amt,0), expense = TX.filter(t=>!t.inc).reduce((s,t)=>s+t.amt,0)
+const catIcon = (c, s=18) => `<span class="cat" style="background:${CAT[c][1]}">${i(CAT[c][2], s)}</span>`
+const dot = '<span class="hint-mark" aria-label="Guessed"></span>'
+
+const side = (on) => `<aside class="side"><div class="brand"><img src="../public/favicon.svg" alt="">MeMoney</div>
+  ${[['overview','house','Overview'],['reports','file','Reports'],['cats','grid','Categories'],['settings','settings','Settings'],['admin','shield','Admin']].map(([k,ic,l])=>`<button class="nav ${k===on?'on':''}">${i(ic)}${l}</button>`).join('')}
+  <div class="me"><span class="avatar">O</span><span>oakky<br><small class="muted">Signed in with Google</small></span></div></aside>`
+const period = `<div class="period"><div class="seg period-toggle"><button aria-pressed="false">Week</button><button aria-pressed="true">Month</button></div><button class="icon-btn">${i('left')}</button><span class="lbl">October 2026</span><button class="icon-btn">${i('right')}</button></div>`
+
+function overview({ sel = -1, pending = false } = {}) {
+  return side('overview') + `<div class="main"><div class="top"><h1>Overview</h1>${pending ? `<button class="pill"><i></i>3 receipts to check</button>` : ''}${period}<button class="btn">${i('plus')}New entry</button><button class="btn pri">${i('upload')}Add receipts</button></div>
+  <div class="body ov">
+    <div class="kpis"><div class="card kpi"><small>Income</small><div class="num inc">${money(income)}</div><div class="sub">3 entries</div></div><div class="card kpi"><small>Expense</small><div class="num">${money(expense)}</div><div class="sub">${Math.round(expense/income*100)}% of income</div></div><div class="card kpi"><small>Remaining</small><div class="num">${money(income-expense)}</div><div class="sub">${Math.round((income-expense)/income*100)}% of income</div></div></div>
+    <section class="card tbl"><div class="tbl-head"><div class="search">${i('search',18)}Search notes or shops</div><div class="seg filter"><button class="n" aria-pressed="true">${i('list',18)}</button><button class="e" aria-pressed="false">${i('minus',18,2.6)}</button><button class="i" aria-pressed="false">${i('plus',18,2.6)}</button></div></div>
+      <table><thead><tr><th>Date</th><th>Category</th><th>Note</th><th></th><th class="amt">Amount</th></tr></thead><tbody>
+      ${TX.map((t,n)=>`<tr class="${n===sel?'sel':''}"><td class="muted">${t.d}</td><td><div class="cc">${catIcon(t.cat)}${t.m||CAT[t.cat][0]}</div></td><td class="muted">${t.note}</td><td>${t.photo?`<span class="muted">${i('clip',14)}</span>`:''}</td><td class="amt num ${t.inc?'inc':''}">${t.inc?'+':'−'}${money(t.amt)}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="tbl-foot">${i('upload',16)}Tip: drop receipt photos anywhere on this window to add them.</div></section>
+  </div></div>`
+}
+
+/** One form for new, edit and receipt review. */
+function entryForm({ type = 'expense', amount = '', date = 'Fri, 3 Oct 2026', cat, note = '', photo = false, hints = [], focus = false } = {}) {
+  const h = (f) => hints.includes(f) ? dot : ''
+  const list = type === 'income' ? INC : EXP
+  return `<div class="ef">
+    <div class="typeseg" role="group" aria-label="Type"><button class="e" aria-pressed="${type==='expense'}">Expense</button><button class="i" aria-pressed="${type==='income'}">Income</button></div>
+    <label class="fld"><span>Amount ${h('amount')}</span><div class="in amt ${type==='income'?'inc':'exp'} ${focus?'focus':''}"><span class="cur">฿</span>${amount ? amount : '<span class="muted">0</span>'}${focus?'<span class="caret"></span>':''}</div></label>
+    <div class="two">
+      <label class="fld"><span>Date ${h('date')}</span><div class="in">${i('cal',18)}${date}</div></label>
+      <label class="fld"><span>Note ${h('note')}</span><div class="in">${note || '<span class="muted">Add a note</span>'}</div></label>
+    </div>
+    <div class="fld"><span>Category ${h('cat')}</span><div class="cgrid">${list.map(c=>`<button aria-pressed="${c===cat}">${catIcon(c,20)}${CAT[c][0]}</button>`).join('')}</div></div>
+    ${photo === 'none' ? '' : `<div class="fld"><span>Receipt</span>${photo ? `<div class="rcpt"><img src="${receipt()}" alt=""><span class="t">receipt.jpg</span><button class="lnk">Replace</button><button class="lnk">Remove</button></div>` : `<button class="rcpt empty">${i('img',18)} Attach photo</button>`}</div>`}
+  </div>`
+}
+
+function panel(edit) {
+  return `<div class="scrim"></div><aside class="panel"><div class="panel-head"><h2>${edit ? 'Edit entry' : 'New entry'}</h2><button class="icon-btn" aria-label="Close">${i('x')}</button></div>
+    ${edit ? entryForm({ amount:'349', cat:'shopping', note:'ของใช้ในบ้าน', photo:true }) : entryForm({ focus:true })}
+    <div class="foot">${edit ? `<button class="btn danger">${i('trash',18)}Delete</button>` : ''}<span class="grow"></span><span class="kbd"><kbd>Enter</kbd> to save</span><button class="btn">Cancel</button><button class="btn pri">${edit ? 'Save changes' : 'Save entry'}</button></div></aside>`
+}
+
+function review() {
+  const q = [['receipt-0931.jpg','Saved · Starbucks ฿145','ok'],['receipt-0932.jpg','Check · Big C ฿612','chk',1],['receipt-0933.jpg','Check · Shell ฿1,000','chk'],['IMG_2201.png','Reading…','',0,1],['IMG_2202.heic','Can’t open this file','bad']]
+  return `<div class="layer"><div class="top"><h1>Review receipts</h1><span class="muted count">1 of 5 saved</span><button class="btn">${i('plus')}Add more</button><button class="icon-btn" aria-label="Close">${i('x')}</button></div>
+    <div class="body rv">
+      <section class="card queue">${q.map(([n,s,c,on,spin])=>`<button class="qi ${on?'on':''}">${c==='bad'?`<span class="qi-ph" style="width:36px;height:48px;display:grid;place-items:center;color:var(--muted)">${i('imgoff',18)}</span>`:`<img src="${receipt(36,48)}" alt="">`}<span><div class="t">${n}</div><div class="s ${c}">${spin?i('spin',12,2.4,'spin'):''}${s}</div></span></button>`).join('')}</section>
+      <section class="card photo-view"><img src="${receipt(330,434)}" alt="Receipt"></section>
+      <section class="rv-form">
+        <div class="src">From your receipt · Big C · <span>${dot} = our guess</span></div>
+        ${entryForm({ amount:'612', cat:'shopping', date:'Thu, 2 Oct 2026', note:'ของสด, น้ำยาล้างจาน', photo:'none', hints:['amount','cat','date','note'] })}
+        <div class="foot"><span class="kbd grow"><kbd>Enter</kbd> save · <kbd>→</kbd> next</span><button class="btn">Skip</button><button class="btn pri">Save entry</button></div>
+      </section>
+    </div></div>`
+}
+
+function drop() {
+  return overview() + `<div class="dropover"><div>${i('upload',40)}<strong>Drop to add receipts</strong><small>JPG or PNG · as many as you like · you’ll check each one before it’s saved</small></div></div>`
+}
+
+function reports() {
+  const sum = (inc) => { const m = {}; TX.filter(t=>!!t.inc===inc).forEach(t=>m[t.cat]=(m[t.cat]||0)+t.amt); return Object.entries(m).sort((a,b)=>b[1]-a[1]) }
+  const inc = sum(true), exp = sum(false), max = exp[0][1], pct = (a) => Math.round(a/income*100) + '% of income'
+  return side('reports') + `<div class="main"><div class="top"><h1>Reports</h1>${period}<button class="btn">${i('download')}Download CSV</button><button class="btn pri">${i('download')}Download PDF</button></div>
+  <div class="body rp">
+    <section class="card rcard"><h2>Total income</h2><div class="big num inc">${money(income)}</div>
+      <div class="stack">${inc.map(([c,a])=>`<i style="width:${a/income*100}%;background:${CAT[c][1]}"></i>`).join('')}</div>
+      <div class="legend">${inc.map(([c,a])=>`<div class="lg"><span><i style="background:${CAT[c][1]}"></i>${CAT[c][0]}</span><span class="num">${money(a)}</span><small>${pct(a)}</small></div>`).join('')}</div>
+      <div class="metrics"><div><span>Expense</span><b class="num">${money(expense)}</b><small>${pct(expense)}</small></div><div><span>Remaining</span><b class="num">${money(income-expense)}</b><small>${pct(income-expense)}</small></div></div>
+    </section>
+    <section class="card rcard"><div class="ehead"><h2>Expense by category</h2><span class="num muted">${money(expense)}</span></div>
+      <div>${exp.map(([c,a])=>`<div class="erow">${catIcon(c)}<span>${CAT[c][0]} <small class="muted">${Math.round(a/expense*100)}%</small></span><span class="num">${money(a)}</span><div class="bar"><i style="width:${a/max*100}%;background:${CAT[c][1]}"></i></div></div>`).join('')}</div>
+    </section>
+  </div></div>`
+}
+
+function cats() {
+  const col = (title, built, mine) => `<section class="card ccol"><div class="ccol-head"><h2>${title}</h2><button class="btn">${i('plus',18)}Add</button></div>
+    <h3>Built in</h3>${built.map(c=>`<div class="crow">${catIcon(c)}<span class="grow">${CAT[c][0]}</span></div>`).join('')}
+    <h3>Your categories</h3>${mine.length ? mine.map(c=>`<button class="crow">${catIcon(c)}<span class="grow">${CAT[c][0]}</span><span class="muted">${i('right',16)}</span></button>`).join('') : `<div class="crow empty">None yet</div>`}</section>`
+  return side('cats') + `<div class="main"><div class="top"><h1>Categories</h1></div>
+  <div class="body cols">${col('Expense', ['food','shopping','bills','transport','other'], ['coffee'])}${col('Income', INC, [])}</div></div>`
+}
+
+function settings() {
+  return side('settings') + `<div class="main"><div class="top"><h1>Settings</h1></div>
+  <div class="body set">
+    <section class="card sec"><h2>Account</h2>
+      <div class="srow"><span class="avatar lg">O</span><span class="grow">oakky<small>imbaoak@gmail.com · Signed in with Google</small></span><button class="btn">${i('out',18)}Sign out</button></div></section>
+    <section class="card sec"><h2>Preferences</h2>
+      <div class="srow"><span class="grow">Currency<small>Used for new entries and reports</small></span><button class="select">฿ Thai baht ${i('down',16)}</button></div></section>
+  </div></div>`
+}
+
+function admin() {
+  const A = [['Oakky','imbaoak@gmail.com',41,9,50,0,0.0312],['Nok','nok.p@gmail.com',28,14,42,2,0.0244],['Mint Ch.','mint.ch@outlook.com',17,0,17,0,0.0098],['Beam','beam.k@gmail.com',6,3,9,0,0.0051],['Tester','tester@example.test',0,0,0,0,0],['Ploy','ploy@gmail.com',0,0,0,0,0]]
+  const tot = A.reduce((t,a)=>({cam:t.cam+a[2],voice:t.voice+a[3],usd:t.usd+a[6],unk:t.unk+a[5]}),{cam:0,voice:0,usd:0,unk:0})
+  const active = A.filter(a=>a[4]>0).length, usd = (v) => '$' + v.toFixed(4)
+  return side('admin') + `<div class="main"><div class="top"><h1>Admin</h1>
+    <div class="period"><div class="seg period-toggle"><button aria-pressed="false">Weekly</button><button aria-pressed="true">Monthly</button></div><button class="icon-btn">${i('left')}</button><span class="range">1 Oct – 31 Oct 2026</span><button class="icon-btn" disabled style="opacity:.35">${i('right')}</button></div>
+    <button class="icon-btn" aria-label="Refresh">${i('refresh',18)}</button></div>
+  <div class="body adm">
+    <div class="kpis">
+      <div class="card kpi"><small>Estimated cost</small><div class="num">${usd(tot.usd)}</div><div class="sub">USD · partial total</div></div>
+      <div class="card kpi"><small>Camera calls</small><div class="num">${tot.cam}</div><div class="sub">Receipt photos read</div></div>
+      <div class="card kpi"><small>Voice calls</small><div class="num">${tot.voice}</div><div class="sub">Voice may use two calls</div></div>
+      <div class="card kpi"><small>Active accounts</small><div class="num">${active}</div><div class="sub">of ${A.length} accounts</div></div>
+    </div>
+    <div class="warn" style="margin:0">${i('alert',18)}${tot.unk} calls have an unavailable cost and are left out of the total.</div>
+    <section class="card tbl"><div class="tbl-head"><div class="search">${i('search',18)}Search name or email</div></div>
+      <table class="utbl"><thead><tr><th>Account</th><th class="n">Camera</th><th class="n">Voice</th><th class="n">Est. cost</th><th class="n">Share of cost</th></tr></thead><tbody>
+      ${A.map(([n,e,c,v,calls,u,d])=>`<tr class="${calls?'':'idle'}"><td><div class="who"><span class="avatar">${n[0]}</span><span>${n}<small>${e}</small></span></div></td><td class="n">${c}</td><td class="n">${v}</td><td class="n num">${calls?usd(d)+(u?'*':''):'—'}</td><td class="n">${calls?`<div class="share"><div class="bar"><i style="width:${d/tot.usd*100}%"></i></div><small>${Math.round(d/tot.usd*100)}%</small></div>`:'<span class="muted">No activity</span>'}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="foot-note">* includes unpriced calls. New activity only; costs are estimates from OpenAI list prices.</div>
+    </section>
+  </div></div>`
+}
+
+const frame = document.getElementById('frame')
+const views = {
+  overview: () => overview(), drop, review: () => overview() + review(), pending: () => overview({ pending:true }),
+  edit: () => overview({ sel:0 }) + panel(true), add: () => overview() + panel(false), reports, cats, settings, admin,
+}
+function show(v){ frame.innerHTML = views[v](); document.querySelectorAll('[data-v]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.v===v))) }
+document.querySelectorAll('[data-v]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.v)))
+show('overview')
+</script></body></html>
