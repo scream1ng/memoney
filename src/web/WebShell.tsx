@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { matchPath, Navigate, NavLink, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom'
 import { isAdmin } from '../lib/access'
 import { authClient } from '../lib/auth'
-import { monthLabel, shiftMonth, shiftWeek, weekLabel } from '../lib/format'
-import { monthAtom, periodAtom, useAtom, weekAtom } from '../lib/store'
+import { useSelectedPeriod } from '../lib/store'
+import { PeriodToggle } from '../components/ui'
 import { EntryPanel } from './EntryPanel'
 import { Overview } from './Overview'
 import { Reports } from './Reports'
@@ -143,21 +143,15 @@ function AccountMenu({ name }: { name: string }) {
   )
 }
 
-/** Week/Month and the period arrows, shared with the phone screens' selection. */
+/** Day/Week/Month and the period arrows, shared with the phone screens' selection. */
 export function PeriodControl() {
-  const [period, setPeriod] = useAtom(periodAtom)
-  const [month, setMonth] = useAtom(monthAtom)
-  const [week, setWeek] = useAtom(weekAtom)
-  const shift = (d: number) => (period === 'week' ? setWeek(shiftWeek(week, d)) : setMonth(shiftMonth(month, d)))
+  const sel = useSelectedPeriod()
   return (
     <div className="wd-period">
-      <div className="seg period-toggle" role="group" aria-label="Time period">
-        <button aria-pressed={period === 'week'} onClick={() => setPeriod('week')}>Week</button>
-        <button aria-pressed={period === 'month'} onClick={() => setPeriod('month')}>Month</button>
-      </div>
-      <button className="icon-btn" aria-label={period === 'week' ? 'Previous week' : 'Previous month'} onClick={() => shift(-1)}><ChevronLeft size={20} /></button>
-      <span className="wd-period-label" aria-live="polite">{period === 'week' ? weekLabel(week) : monthLabel(month)}</span>
-      <button className="icon-btn" aria-label={period === 'week' ? 'Next week' : 'Next month'} onClick={() => shift(1)}><ChevronRight size={20} /></button>
+      <PeriodToggle value={sel.period} onChange={sel.setPeriod} />
+      <button className="icon-btn" aria-label={`Previous ${sel.period}`} onClick={() => sel.shift(-1)}><ChevronLeft size={20} /></button>
+      <span className="wd-period-label" aria-live="polite">{sel.title}</span>
+      <button className="icon-btn" aria-label={`Next ${sel.period}`} onClick={() => sel.shift(1)}><ChevronRight size={20} /></button>
     </div>
   )
 }

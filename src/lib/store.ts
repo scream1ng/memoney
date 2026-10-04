@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { Tx } from './types'
-import { monthKey, shiftWeek, today, weekStart } from './format'
+import { dayLabel, fromDateKey, monthKey, monthLabel, shiftDay, shiftMonth, shiftWeek, today, weekLabel, weekStart } from './format'
 
 export interface TxRepo {
   list(): Tx[]
@@ -83,6 +83,10 @@ export function forMonth(txs: Tx[], month: string): Tx[] {
   return txs.filter((t) => monthKey(t.date) === month).sort(byNewest)
 }
 
+export function forDay(txs: Tx[], day: string): Tx[] {
+  return txs.filter((t) => t.date === day).sort(byNewest)
+}
+
 export function forWeek(txs: Tx[], week: string): Tx[] {
   const end = shiftWeek(week, 1)
   return txs.filter((t) => t.date >= week && t.date < end).sort(byNewest)
@@ -142,7 +146,26 @@ export function useAtom<T>(a: Atom<T>): [T, (v: T) => void] {
 export const monthAtom = atom('pocket.month', monthKey(today()), false)
 export const currencyAtom = atom('pocket.currency', '$')
 
-export const periodAtom = atom<'week' | 'month'>('pocket.period', 'month', false)
+export const periodAtom = atom<Period>('pocket.period', 'month', false)
 export const weekAtom = atom('pocket.week', weekStart(today()), false)
+export const dayAtom = atom('pocket.day', today(), false)
+
+export type Period = 'day' | 'week' | 'month'
+
+/** The selected Day/Week/Month: its key, labels, which entries fall in it, and how to step it. */
+export function useSelectedPeriod() {
+  const [period, setPeriod] = useAtom(periodAtom)
+  const [day, setDay] = useAtom(dayAtom)
+  const [week, setWeek] = useAtom(weekAtom)
+  const [month, setMonth] = useAtom(monthAtom)
+  const base = { period, setPeriod }
+  if (period === 'day') {
+    // reports need an absolute date, not "Today"
+    const label = fromDateKey(day).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    return { ...base, key: day, title: dayLabel(day), label, select: (txs: Tx[]) => forDay(txs, day), shift: (d: number) => setDay(shiftDay(day, d)) }
+  }
+  if (period === 'week') return { ...base, key: week, title: weekLabel(week), label: weekLabel(week), select: (txs: Tx[]) => forWeek(txs, week), shift: (d: number) => setWeek(shiftWeek(week, d)) }
+  return { ...base, key: month, title: monthLabel(month), label: monthLabel(month), select: (txs: Tx[]) => forMonth(txs, month), shift: (d: number) => setMonth(shiftMonth(month, d)) }
+}
 
 export const deleteFailureAtom = atom<Tx | undefined>('pocket.delete-error', undefined, false)

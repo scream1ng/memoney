@@ -2,9 +2,9 @@ import { Download, LoaderCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { CatIcon } from '../components/ui'
 import { category, useCustomCategories } from '../lib/categories'
-import { money, monthLabel, weekLabel } from '../lib/format'
+import { money } from '../lib/format'
 import { createReportCsv } from '../lib/reportCsv'
-import { currencyAtom, forMonth, forWeek, monthAtom, periodAtom, totals, useAtom, useTransactions, weekAtom } from '../lib/store'
+import { currencyAtom, totals, useAtom, useSelectedPeriod, useTransactions } from '../lib/store'
 import { PeriodControl } from './WebShell'
 
 function download(file: File) {
@@ -23,12 +23,10 @@ export function Reports() {
   useCustomCategories()
   const all = useTransactions()
   const [symbol] = useAtom(currencyAtom)
-  const [period] = useAtom(periodAtom)
-  const [month] = useAtom(monthAtom)
-  const [week] = useAtom(weekAtom)
-  const transactions = useMemo(() => (period === 'week' ? forWeek(all, week) : forMonth(all, month)), [all, period, week, month])
-  const label = period === 'week' ? weekLabel(week) : monthLabel(month)
-  const filename = `MeMoney-${period}-${period === 'week' ? week : month}.pdf`
+  const sel = useSelectedPeriod()
+  const transactions = useMemo(() => sel.select(all), [all, sel.period, sel.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  const label = sel.label
+  const filename = `MeMoney-${sel.period}-${sel.key}.pdf`
   const [making, setMaking] = useState(false)
   const [error, setError] = useState('')
   const { income, expense, balance } = totals(transactions)
