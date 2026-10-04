@@ -3,8 +3,8 @@ import { useMemo, useRef, useState } from 'react'
 import { useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { CatIcon } from '../components/ui'
 import { category, useCustomCategories } from '../lib/categories'
-import { fromDateKey, money, monthLabel, weekLabel } from '../lib/format'
-import { currencyAtom, forMonth, forWeek, monthAtom, periodAtom, totals, useAtom, useTransactions, weekAtom } from '../lib/store'
+import { fromDateKey, money } from '../lib/format'
+import { currencyAtom, totals, useAtom, useSelectedPeriod, useTransactions } from '../lib/store'
 import type { TxType } from '../lib/types'
 import { addFiles, pending, showReview, useUploads } from './uploads'
 import { PeriodControl } from './WebShell'
@@ -21,19 +21,17 @@ export function Overview({ selected }: { selected?: string }) {
   const matched = useMatch('/tx/:id')?.params.id
   const open = selected ?? matched
   const [symbol] = useAtom(currencyAtom)
-  const [period] = useAtom(periodAtom)
-  const [month] = useAtom(monthAtom)
-  const [week] = useAtom(weekAtom)
+  const sel = useSelectedPeriod()
   const [filter, setFilter] = useState<TxType | 'all'>('all')
   const [query, setQuery] = useState('')
-  const periodTxs = useMemo(() => (period === 'week' ? forWeek(all, week) : forMonth(all, month)), [all, period, week, month])
+  const periodTxs = useMemo(() => sel.select(all), [all, sel.period, sel.key]) // eslint-disable-line react-hooks/exhaustive-deps
   const { income, expense, balance } = totals(periodTxs)
   const q = query.trim().toLowerCase()
   const rows = periodTxs.filter((t) => (filter === 'all' || t.type === filter) &&
     (!q || [t.note, t.merchant, category(t.category).label].some((s) => s?.toLowerCase().includes(q))))
   const pct = (n: number) => (income > 0 ? `${Math.round((n / income) * 100)}% of income` : '—')
   const incomeCount = periodTxs.filter((t) => t.type === 'income').length
-  const label = period === 'week' ? weekLabel(week) : monthLabel(month)
+  const label = sel.title
   const toCheck = useUploads().filter(pending).length
   const edit = (id: string) => navigate(`/tx/${id}`, { state: { bg: location.state?.bg ?? location } })
 

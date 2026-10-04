@@ -42,7 +42,7 @@ function homeHtml(txs: Entry[], newest?: Entry) {
   return `<main class="screen">
     <div class="row between month"><h1>October</h1><div class="row"><button class="icon-btn">${i('left', 20)}</button><button class="icon-btn">${i('right', 20)}</button></div></div>
     <section class="summary"><div class="num balance">${money(income - expense)}</div><div class="io"><span class="num inc">+${money(income)}</span><span class="num exp">−${money(expense)}</span></div></section>
-    <div class="row between period-controls"><div class="seg filter"><button class="n" aria-pressed="true">${i('list', 18)}</button><button class="e" aria-pressed="false">${i('minus', 18, 2.6)}</button><button class="i" aria-pressed="false">${i('plus', 18, 2.6)}</button></div><div class="seg period-toggle"><button aria-pressed="false">Week</button><button aria-pressed="true">Month</button></div></div>
+    <div class="row between period-controls"><div class="seg filter"><button class="n" aria-pressed="true">${i('list', 18)}</button><button class="e" aria-pressed="false">${i('minus', 18, 2.6)}</button><button class="i" aria-pressed="false">${i('plus', 18, 2.6)}</button></div><div class="seg period-toggle"><button aria-pressed="false">Day</button><button aria-pressed="false">Week</button><button aria-pressed="true">Month</button></div></div>
     <div class="card list">${days.map((d) => `<section><div class="day">${d}</div>${txs.filter((t) => t.day === d).map((t) => txRow(t, t === newest)).join('')}</section>`).join('')}</div>
   </main>`
 }

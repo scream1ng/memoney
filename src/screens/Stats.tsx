@@ -1,19 +1,17 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useMemo } from 'react'
-import { CatIcon } from '../components/ui'
+import { CatIcon, PeriodToggle } from '../components/ui'
 import { ReportExportSheet } from '../components/ReportExportSheet'
 import { category, useCustomCategories } from '../lib/categories'
-import { money, monthLabel, shiftMonth, shiftWeek, weekLabel } from '../lib/format'
-import { currencyAtom, forMonth, forWeek, monthAtom, periodAtom, weekAtom, totals, useAtom, useTransactions } from '../lib/store'
+import { money } from '../lib/format'
+import { currencyAtom, totals, useAtom, useSelectedPeriod, useTransactions } from '../lib/store'
 
 export function Stats({ exportOpen, onCloseExport }: { exportOpen: boolean; onCloseExport: () => void }) {
   useCustomCategories()
   const all = useTransactions()
-  const [month, setMonth] = useAtom(monthAtom)
   const [symbol] = useAtom(currencyAtom)
-  const [period, setPeriod] = useAtom(periodAtom)
-  const [week, setWeek] = useAtom(weekAtom)
-  const transactions = useMemo(() => period === 'week' ? forWeek(all, week) : forMonth(all, month), [all, period, week, month])
+  const sel = useSelectedPeriod()
+  const transactions = useMemo(() => sel.select(all), [all, sel.period, sel.key]) // eslint-disable-line react-hooks/exhaustive-deps
   const { income, expense, balance } = totals(transactions)
   const incomeSums = new Map<string, number>()
   const expenseSums = new Map<string, number>()
@@ -28,20 +26,17 @@ export function Stats({ exportOpen, onCloseExport }: { exportOpen: boolean; onCl
 
   return (
     <main className="screen">
-      <div className={`row between month${period === 'week' ? ' week' : ''}`}>
-        <h1>{period === 'week' ? weekLabel(week) : monthLabel(month)}</h1>
+      <div className={`row between month${sel.period === 'week' ? ' week' : ''}`}>
+        <h1>{sel.title}</h1>
         <div className="row">
-          <button className="icon-btn" aria-label={period === 'week' ? 'Previous week' : 'Previous month'} onClick={() => period === 'week' ? setWeek(shiftWeek(week, -1)) : setMonth(shiftMonth(month, -1))}><ChevronLeft size={20} /></button>
-          <button className="icon-btn" aria-label={period === 'week' ? 'Next week' : 'Next month'} onClick={() => period === 'week' ? setWeek(shiftWeek(week, 1)) : setMonth(shiftMonth(month, 1))}><ChevronRight size={20} /></button>
+          <button className="icon-btn" aria-label={`Previous ${sel.period}`} onClick={() => sel.shift(-1)}><ChevronLeft size={20} /></button>
+          <button className="icon-btn" aria-label={`Next ${sel.period}`} onClick={() => sel.shift(1)}><ChevronRight size={20} /></button>
         </div>
       </div>
       <section className="card stats-summary" aria-label="Income and spending summary">
         <div className="stats-summary-top">
           <div className="stats-summary-headline"><span className="stats-summary-kicker">TOTAL INCOME</span><span className="num stats-summary-amount">{money(income, symbol)}</span></div>
-          <div className="seg period-toggle" role="group" aria-label="Time period">
-            <button aria-pressed={period === 'week'} onClick={() => setPeriod('week')}>Week</button>
-            <button aria-pressed={period === 'month'} onClick={() => setPeriod('month')}>Month</button>
-          </div>
+          <PeriodToggle value={sel.period} onChange={sel.setPeriod} />
         </div>
         <div className="stats-income-bar" aria-hidden="true">
           {incomeRows.map(([id, amount]) => <span key={id} style={{ width: `${(amount / income) * 100}%`, background: category(id).color }} />)}
@@ -79,7 +74,7 @@ export function Stats({ exportOpen, onCloseExport }: { exportOpen: boolean; onCl
       ) : (
         <div className="card stats-empty">No expenses this period</div>
       )}
-      {exportOpen && <ReportExportSheet label={period === 'week' ? weekLabel(week) : monthLabel(month)} filename={`MeMoney-${period}-${period === 'week' ? week : month}.pdf`} transactions={transactions} symbol={symbol} onClose={onCloseExport} />}
+      {exportOpen && <ReportExportSheet label={sel.label} filename={`MeMoney-${sel.period}-${sel.key}.pdf`} transactions={transactions} symbol={symbol} onClose={onCloseExport} />}
     </main>
   )
 }

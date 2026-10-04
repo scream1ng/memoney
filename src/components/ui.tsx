@@ -5,7 +5,7 @@ import { useDeleteTap } from '../hooks/useDeleteTap'
 import { setCapture } from '../lib/capture'
 import { category, useCustomCategories } from '../lib/categories'
 import { dayLabel, money } from '../lib/format'
-import { currencyAtom, useAtom } from '../lib/store'
+import { currencyAtom, useAtom, type Period } from '../lib/store'
 import type { Tx, TxType } from '../lib/types'
 
 export function CatIcon({ id, size = 22 }: { id: string; size?: number }) {
@@ -213,6 +213,16 @@ function SwipeRow({ open, onOpen, onDelete, onTap, label, children }: {
       >
         {children}
       </button>
+    </div>
+  )
+}
+
+const PERIODS: [Period, string][] = [['day', 'Day'], ['week', 'Week'], ['month', 'Month']]
+
+export function PeriodToggle({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+  return (
+    <div className="seg period-toggle" role="group" aria-label="Time period">
+      {PERIODS.map(([p, label]) => <button key={p} aria-pressed={value === p} onClick={() => onChange(p)}>{label}</button>)}
     </div>
   )
 }

@@ -1,0 +1,133 @@
+<!doctype html>
+<!-- Day period mockup. Decisions:
+- Period toggle becomes Day | Week | Month everywhere it exists: phone Home, phone Stats, desktop PeriodControl (WebShell). Shared periodAtom, so all screens follow.
+- New store: dayAtom (YYYY-MM-DD, default today()), forDay(txs, day); periodAtom gains 'day'. New format helper shiftDay(day, delta).
+- Title uses existing dayLabel(): "Today" / "Yesterday" / "Sat 3 Oct". Arrows step ±1 day (aria "Previous day"/"Next day").
+- List: same TxList; one day group. Empty: "No transactions for Today." (existing Empty).
+- Stats: unchanged layout, data scoped to the day.
+- Export: label = dayLabel, filename MeMoney-day-YYYY-MM-DD.pdf.
+- Refactor: the six `period === 'week' ? … : …` ternaries (Home, Stats, Overview, Reports, WebShell, ReportExportSheet caller) collapse into one helper returning { txs, label, shift, prevLabel, nextLabel }.
+- CSS: phone .period-toggle button 64px → 56px. With 3 buttons at 64px the controls row is 344px vs 343px available at 375 width (overflow); at 56px it is 320px.
+- NOT changed: Usage / Admin "Weekly/Monthly" toggles (API usage, not spending).
+OPEN: (1) default period on launch — Day or keep Month? (2) tap title → date picker to jump?
+Static sample data only. Markup copied from Home.tsx / Stats.tsx / TxList / WebShell PeriodControl / landingDemo.ts, styled by src/styles.css. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MeMoney · day period mockup</title>
+<link rel="stylesheet" href="../src/styles.css">
+<style>
+html { height:auto!important; overflow-y:auto!important; overscroll-behavior:auto!important; }
+body { height:auto!important; overflow:visible!important; overscroll-behavior:auto!important; padding:32px; }
+.wrap { max-width:1300px; margin:auto; }
+.wrap > h1 { font-size:26px; letter-spacing:-.5px; margin-bottom:6px; }
+.lede { color:var(--muted); margin-bottom:28px; }
+.frames { display:flex; flex-wrap:wrap; gap:28px; align-items:flex-start; }
+.caption { font-size:13px; color:var(--muted); margin-bottom:10px; font-weight:600; }
+.phone { width:375px; height:740px; position:relative; overflow:hidden; border-radius:38px; background:var(--bg); box-shadow:0 0 0 .5px var(--sep),0 4px 12px rgba(0,0,0,.12); }
+.phone .screen { min-height:0; height:100%; padding:54px 16px 110px; overflow:hidden; }
+.phone .dock { position:absolute; bottom:14px; }
+/* proposed CSS change */
+.phone .period-toggle button { width:56px; }
+.open-q { position:absolute; z-index:5; background:#ffcc00; color:#000; font-size:12px; font-weight:600; padding:4px 8px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+.open-q::before { content:'OPEN · '; }
+.desk { width:780px; border-radius:16px; background:var(--bg); box-shadow:0 0 0 .5px var(--sep); padding-bottom:20px; }
+.diff { display:grid; gap:10px; width:343px; }
+.diff .row { gap:8px; }
+.diff .bad { outline:2px dashed var(--exp); outline-offset:2px; }
+.diff .good .period-toggle button { width:56px; }
+.note { font-size:13px; color:var(--muted); }
+.section-title { font-size:18px; font-weight:700; margin:40px 0 14px; }
+</style></head>
+<body><div class="wrap">
+<h1>Day period</h1>
+<p class="lede">Day | Week | Month on Home, Stats and the desktop header. Yellow tags = still undecided.</p>
+
+<div class="frames">
+  <div><div class="caption">Home · Day · today</div><div class="phone" id="home"></div></div>
+  <div><div class="caption">Home · Day · empty day</div><div class="phone" id="empty"></div></div>
+  <div><div class="caption">Stats · Day</div><div class="phone" id="stats"></div></div>
+</div>
+
+<div class="section-title">Desktop header (WebShell PeriodControl)</div>
+<div class="desk" id="desk"></div>
+
+<div class="section-title">Why the toggle buttons shrink 64 → 56px</div>
+<div class="diff" id="diff"></div>
+</div>
+
+<script>
+const P = {
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>', minus:'<path d="M5 12h14"/>',
+  left:'<path d="m15 18-6-6 6-6"/>', right:'<path d="m9 18 6-6-6-6"/>',
+  list:'<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+  house:'<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  food:'<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
+  bag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+  brief:'<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>',
+  wallet:'<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  down:'<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+}
+const i = (n, s = 22, w = 2, cls = '') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" class="${cls}" aria-hidden="true">${P[n]}</svg>`
+const bars = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>'
+const CAT = { food:['Food','#c93400','food'], shopping:['Shopping','#ff2d55','bag'], transport:['Transport','#007aff','car'], salary:['Salary','#248a3d','brief'] }
+const money = (n) => '฿' + n.toLocaleString('en-US')
+
+// sample: Sun 4 Oct 2026 (today)
+const TODAY = [
+  { cat:'food', note:'ชานม', amt:26 },
+  { cat:'shopping', note:'ของใช้ในบ้าน', amt:349, merchant:"Lotus's" },
+  { cat:'food', note:'ข้าวมันไก่', amt:60 },
+  { cat:'transport', note:'BTS', amt:45 },
+  { cat:'salary', note:'Freelance logo', amt:1200, inc:true },
+]
+
+const txRow = (t) => `<div class="swipe"><button class="row tx"><span class="cat" style="background:${CAT[t.cat][1]}">${i(CAT[t.cat][2])}</span><div class="grow"><div>${t.merchant || CAT[t.cat][0]}</div>${t.note ? `<div class="sub">${t.note}</div>` : ''}</div><span class="num ${t.inc ? 'inc' : 'exp'}">${t.inc ? '+' : '−'}${money(t.amt)}</span></button></div>`
+const header = (title) => `<div class="row between month"><h1>${title}</h1><div class="row"><button class="icon-btn" aria-label="Previous day">${i('left', 20)}</button><button class="icon-btn" aria-label="Next day">${i('right', 20)}</button></div></div>`
+const toggle = (p = 'day') => `<div class="seg period-toggle" role="group" aria-label="Time period">${['Day','Week','Month'].map((l) => `<button aria-pressed="${l.toLowerCase() === p}">${l}</button>`).join('')}</div>`
+const filterSeg = `<div class="seg filter"><button class="n" aria-pressed="true">${i('list', 18)}</button><button class="e" aria-pressed="false">${i('minus', 18, 2.6)}</button><button class="i" aria-pressed="false">${i('plus', 18, 2.6)}</button></div>`
+const controls = `<div class="row between period-controls">${filterSeg}${toggle()}</div>`
+const dock = (tab) => `<nav class="dock"><div class="glass tabs"><a class="${tab === 0 ? 'active' : ''}">${i('house')}</a><a class="${tab === 1 ? 'active' : ''}">${bars}</a><a>${i('settings')}</a></div><button class="glass fab">${i('plus', 28, 2.4)}</button></nav>`
+
+function homeHtml(title, txs) {
+  const inc = txs.filter((t) => t.inc).reduce((s, t) => s + t.amt, 0), exp = txs.filter((t) => !t.inc).reduce((s, t) => s + t.amt, 0)
+  const body = txs.length
+    ? `<div class="card list"><section><div class="day">${title}</div>${txs.map(txRow).join('')}</section></div>`
+    : `<div class="empty"><div class="big">${i('wallet', 40)}</div><p role="status">No transactions for ${title}.</p><button class="empty-action">Add entry</button>${i('down', 26, 2, 'bob')}</div>`
+  return `<main class="screen">${header(title)}
+    <section class="summary"><div class="num balance">${money(inc - exp)}</div><div class="io"><span class="num inc">+${money(inc)}</span><span class="num exp">−${money(exp)}</span></div></section>
+    ${controls}${body}</main>${dock(0)}`
+}
+
+function statsHtml(title, txs) {
+  const sum = (inc) => { const m = new Map(); txs.filter((t) => !!t.inc === inc).forEach((t) => m.set(t.cat, (m.get(t.cat) ?? 0) + t.amt)); return [...m].sort((a, b) => b[1] - a[1]) }
+  const incRows = sum(true), expRows = sum(false)
+  const income = incRows.reduce((s, r) => s + r[1], 0), expense = expRows.reduce((s, r) => s + r[1], 0), max = expRows[0]?.[1] ?? 1
+  const pct = (a) => income > 0 ? `${Math.round(a / income * 100)}% of income` : '—'
+  return `<main class="screen">${header(title)}
+    <section class="card stats-summary">
+      <div class="stats-summary-top"><div class="stats-summary-headline"><span class="stats-summary-kicker">TOTAL INCOME</span><span class="num stats-summary-amount">${money(income)}</span></div>${toggle()}</div>
+      <div class="stats-income-bar">${incRows.map(([id, a]) => `<span style="width:${a / income * 100}%;background:${CAT[id][1]}"></span>`).join('')}</div>
+      <div class="stats-income-legend">${incRows.map(([id, a]) => `<div class="stats-income-legend-item"><span class="stats-income-legend-name"><i style="background:${CAT[id][1]}"></i>${CAT[id][0]}</span><span class="num">${money(a)}</span><small>${pct(a)}</small></div>`).join('')}</div>
+      <div class="stats-summary-metrics"><div><span class="muted">Expense</span><span class="num">${money(expense)}</span><small>${pct(expense)}</small></div><div><span class="muted">Remaining</span><span class="num">${money(income - expense)}</span><small>${pct(income - expense)}</small></div></div>
+    </section>
+    <h2 class="stats-breakdown-title">Expense by category</h2>
+    <section class="card bars">${expRows.map(([id, a]) => `<div class="row"><span class="cat" style="background:${CAT[id][1]}">${i(CAT[id][2])}</span><div class="grow"><div class="row between"><span>${CAT[id][0]} <small class="muted">${Math.round(a / expense * 100)}%</small></span><span class="num">${money(a)}</span></div><div class="bar"><i style="width:${a / max * 100}%;background:${CAT[id][1]}"></i></div></div></div>`).join('')}</section>
+  </main>${dock(1)}`
+}
+
+const q = (txt, style) => `<div class="open-q" style="${style}">${txt}</div>`
+document.getElementById('home').innerHTML = homeHtml('Today', TODAY) + q('Default to Day on launch?', 'top:100px;right:16px') + q('Tap title → date picker?', 'top:20px;left:16px')
+document.getElementById('empty').innerHTML = homeHtml('Sat 3 Oct', [])
+document.getElementById('stats').innerHTML = statsHtml('Today', TODAY)
+
+document.getElementById('desk').innerHTML = `<div class="wd-top"><h1>Overview</h1>
+  <div class="wd-period">${toggle()}<button class="icon-btn" aria-label="Previous day">${i('left', 20)}</button><span class="wd-period-label">Today</span><button class="icon-btn" aria-label="Next day">${i('right', 20)}</button></div></div>
+  <div class="note" style="padding:12px 28px 0">Export filename → MeMoney-day-2026-10-04.pdf</div>`
+
+document.getElementById('diff').innerHTML = `
+  <div class="note">64px buttons: 138 + 8 + 198 = 344px &gt; 343px available on a 375 phone (more overflow on 360px Android)</div>
+  <div class="bad"><div class="row between period-controls">${filterSeg}${toggle()}</div></div>
+  <div class="note">56px buttons: 138 + 8 + 174 = 320px ✓</div>
+  <div class="good"><div class="row between period-controls">${filterSeg}${toggle()}</div></div>`
+</script>
+</body></html>

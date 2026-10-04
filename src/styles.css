@@ -117,7 +117,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .filter { align-self: flex-start; }
 .period-controls { gap: 8px; }
 .period-controls .filter button { width: 44px; }
-.period-toggle button { width: 64px; font-size: 13px; }
+.period-toggle button { width: 56px; font-size: 13px; }
 .total { font-size: 34px; font-weight: 700; letter-spacing: -1px; }
 
 /* ---------- list: one inset-grouped card per day ---------- */
