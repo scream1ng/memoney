@@ -1,4 +1,4 @@
-import { Camera, Download, House, Mic, Paperclip, PenLine, Plus, Settings, type LucideIcon } from 'lucide-react'
+import { Camera, Download, House, Mic, NotebookPen, Paperclip, PenLine, Plus, Settings, StickyNote, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useDeleteTap } from '../hooks/useDeleteTap'
@@ -42,7 +42,7 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [menu])
-  const open = (via?: 'camera' | 'voice') => {
+  const open = (via?: 'camera') => {
     setMenu(false) // or Back to this page would show it again
     navigate(via ? `/add?via=${via}` : '/add', { state: { bg: location } })
   }
@@ -53,7 +53,8 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
       : Promise.reject(new Error('Microphone not available'))
     stream.catch(() => {}) // handled by the sheet
     setCapture({ kind: 'audio', stream })
-    open('voice')
+    setMenu(false)
+    navigate('/voice', { state: { bg: location } })
   }
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -69,13 +70,16 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
   const tabs = [
     { to: '/', icon: House, label: 'Home' },
     { to: '/stats', icon: ReportBars, label: 'Stats' },
+    { to: '/notes', icon: StickyNote, label: 'Notes' },
     { to: '/settings', icon: Settings, label: 'Settings' },
   ]
   const isHome = location.pathname === '/'
   const isStats = location.pathname === '/stats'
   const isCategories = location.pathname === '/settings/categories'
+  const isNotes = location.pathname === '/notes'
+  const hasMenu = isHome || isNotes
   return (
-    <nav className={`dock${isHome || isStats || isCategories ? '' : ' no-fab'}`}>
+    <nav className={`dock${hasMenu || isStats || isCategories ? '' : ' no-fab'}`}>
       <div className="glass tabs">
         {tabs.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} end={to !== '/settings'} aria-label={label} onClick={() => setMenu(false)}>
@@ -85,20 +89,24 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
       </div>
       {isStats ? (
         <button className="glass fab" aria-label="Export report" onClick={onExport}><Download size={26} strokeWidth={2.2} /></button>
-      ) : isHome ? (
+      ) : hasMenu ? (
         <button className={`glass fab ${menu ? 'open' : ''}`} aria-label={menu ? 'Close add menu' : 'Add'} aria-expanded={menu} onClick={() => setMenu(!menu)}>
           <Plus size={28} strokeWidth={2.4} />
         </button>
       ) : isCategories ? (
         <button className="glass fab" aria-label="Add category" onClick={onAddCategory}><Plus size={28} strokeWidth={2.4} /></button>
       ) : null}
-      {isHome && menu && (
+      {hasMenu && menu && (
         <>
           <div className="menu-shade" onClick={() => setMenu(false)} />
           <div className="quick-actions" role="menu">
-            <MenuAction label="Manual" icon={PenLine} onClick={() => open()} />
-            <MenuAction label="Camera" icon={Camera} onClick={camera} />
-            <MenuAction label="Voice" icon={Mic} onClick={voice} />
+            {isNotes ? (
+              <MenuAction label="New note" icon={NotebookPen} onClick={() => { setMenu(false); navigate('/notes/new', { state: { bg: location } }) }} />
+            ) : <>
+              <MenuAction label="Manual" icon={PenLine} onClick={() => open()} />
+              <MenuAction label="Camera" icon={Camera} onClick={camera} />
+            </>}
+            <MenuAction label="Voice" sub="Add or ask anything" icon={Mic} onClick={voice} />
           </div>
         </>
       )}
@@ -107,10 +115,10 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
   )
 }
 
-function MenuAction({ label, icon: Icon, onClick }: { label: string; icon: LucideIcon; onClick: () => void }) {
+function MenuAction({ label, sub, icon: Icon, onClick }: { label: string; sub?: string; icon: LucideIcon; onClick: () => void }) {
   return (
     <button role="menuitem" className="action" onClick={onClick}>
-      <span className="action-label">{label}</span>
+      <span className="action-label">{label}{sub && <small>{sub}</small>}</span>
       <span className="round"><Icon size={24} /></span>
     </button>
   )
@@ -161,7 +169,7 @@ export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => voi
   )
 }
 
-function SwipeRow({ open, onOpen, onDelete, onTap, label, children }: {
+export function SwipeRow({ open, onOpen, onDelete, onTap, label, children }: {
   open: boolean; onOpen: (open: boolean) => void; onDelete: () => void; onTap: () => void; label: string; children: React.ReactNode
 }) {
   const [dx, setDx] = useState<number>()

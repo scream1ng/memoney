@@ -132,6 +132,12 @@ function Sheet() {
     return () => clearTimeout(t)
   }, [capture]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // opened from Voice's Edit: start from its guess, marked as guessed
+  useEffect(() => {
+    const draft = (location.state as { draft?: Guess } | null)?.draft
+    if (!id && !capture && draft) apply(draft)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const shownAmount = input ? `${symbol}${group(input)}` : money(0, symbol)
   // shrink to fit one line: 46px down to 26px
   useLayoutEffect(() => {
