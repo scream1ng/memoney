@@ -1,4 +1,4 @@
-import { ArrowDown, NotebookPen, StickyNote, Trash2, X } from 'lucide-react'
+import { ArrowDown, NotebookPen, NotebookText, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
@@ -83,7 +83,7 @@ export function Notes() {
         </div>
       ) : (
         <div className="empty">
-          <div className="big" aria-hidden><StickyNote size={40} /></div>
+          <div className="big" aria-hidden><NotebookText size={40} /></div>
           <p role="status">No notes yet.<br />Write one, or tap + and say it.</p>
           <button className="empty-action" onClick={() => open('/notes/new')}>New note</button>
           <ArrowDown size={26} className="bob" aria-hidden />

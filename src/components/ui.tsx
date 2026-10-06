@@ -1,4 +1,4 @@
-import { Camera, Download, House, Mic, NotebookPen, Paperclip, PenLine, Plus, Settings, StickyNote, type LucideIcon } from 'lucide-react'
+import { Camera, Download, Mic, NotebookPen, NotebookText, Paperclip, PenLine, Plus, Settings, Wallet, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useDeleteTap } from '../hooks/useDeleteTap'
@@ -68,9 +68,9 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
     fileRef.current?.click()
   }
   const tabs = [
-    { to: '/', icon: House, label: 'Home' },
+    { to: '/', icon: Wallet, label: 'Home' },
+    { to: '/notes', icon: NotebookText, label: 'Notes' },
     { to: '/stats', icon: ReportBars, label: 'Stats' },
-    { to: '/notes', icon: StickyNote, label: 'Notes' },
     { to: '/settings', icon: Settings, label: 'Settings' },
   ]
   const isHome = location.pathname === '/'

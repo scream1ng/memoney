@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+PLAN: dock icon refresh (mobile dock, src/components/ui.tsx `tabs`)
+- Tab order: Home, Notes, Stats, Settings (Notes moves from 3rd to 2nd).
+- Home icon: replace lucide House. Proposal A = Wallet (recommended).
+  Alternatives: B ReceiptText, C LayoutGrid.
+- Notes icon: a note with 2-3 text lines, not the plain StickyNote.
+  Proposal A = NotebookText (recommended). Alternatives: B FileText,
+  C custom "lined sticky" (StickyNote outline + 3 lines).
+- All are lucide-react exports except C's lined sticky (inline SVG like ReportBars).
+- OPEN: should the Notes empty state (StickyNote 40px) and the Notes-list tile
+  (NotebookPen) switch to the new icon too? Default: empty state yes, tile unchanged.
+- Implementation scope: only the `tabs` array + imports in ui.tsx.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dock icons</title>
+<link rel="stylesheet" href="../src/styles.css" />
+<style>
+  html { height: auto !important; overflow-y: auto !important; overscroll-behavior: auto !important; }
+  body { height: auto !important; overflow: visible !important; overscroll-behavior: auto !important; padding: 24px 16px 60px; }
+  h1.p { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
+  .lede { color: var(--muted); margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px; }
+  .frame { background: linear-gradient(160deg, #e9e9f0, #f7f7fb); border-radius: 28px; padding: 18px 0 20px; position: relative; overflow: hidden; }
+  .frame.rec { outline: 3px solid var(--accent); }
+  .frame h2 { font-size: 15px; font-weight: 600; padding: 0 20px; }
+  .frame .names { font-size: 13px; color: var(--muted); padding: 2px 20px 14px; }
+  .badge { font-size: 11px; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: 2px; }
+  .frame .dock { position: relative !important; bottom: auto !important; }
+  .frame + .frame { margin-top: 0; }
+  .big { display: flex; gap: 28px; padding: 6px 20px 18px; color: var(--ink); }
+  .big figure { text-align: center; font-size: 12px; color: var(--muted); }
+  .big svg { display: block; margin: 0 auto 4px; }
+  .old { opacity: 0.55; }
+</style>
+</head>
+<body>
+<h1 class="p">Dock icons</h1>
+<p class="lede">New order: Home · Notes · Stats · Settings. Top row is the icon at 44px; below it, the real dock (Home tab active).</p>
+<div class="grid" id="frames"></div>
+
+<script>
+const svg = (body, size = 22) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
+// verbatim from src/components/ui.tsx ReportBars
+const bars = (size = 22) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="12" width="4" height="9" rx="1" /><rect x="10" y="7" width="4" height="14" rx="1" /><rect x="17" y="3" width="4" height="18" rx="1" /></svg>`
+// lucide-react 22px output
+const I = {
+  House: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  StickyNote: '<path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/>',
+  Wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  NotebookText: '<path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9.5 8h5"/><path d="M9.5 12H16"/><path d="M9.5 16H14"/>',
+  ReceiptText: '<path d="M13 16H8"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"/>',
+  FileText: '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  LayoutGrid: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  Settings: '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/>',
+  // custom: StickyNote outline + three text lines
+  LinedSticky: '<path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/><path d="M7 9h4"/><path d="M7 13h10"/><path d="M7 17h7"/>',
+}
+const plus = '<path d="M5 12h14"/><path d="M12 5v14"/>'
+
+const options = [
+  { title: 'Current', home: 'House', notes: 'StickyNote', order: 'old', old: true },
+  { title: 'A · Wallet + Notebook', home: 'Wallet', notes: 'NotebookText', rec: true },
+  { title: 'B · Receipt + Page', home: 'ReceiptText', notes: 'FileText' },
+  { title: 'C · Grid + Lined sticky', home: 'LayoutGrid', notes: 'LinedSticky', custom: true },
+]
+
+function tab(icon, active) {
+  return `<a class="${active ? 'active' : ''}">${icon}</a>`
+}
+function dock(o, active) {
+  const home = svg(I[o.home]), notes = svg(I[o.notes]), stats = bars(), settings = svg(I.Settings)
+  const tabs = o.order === 'old'
+    ? [home, stats, notes, settings]
+    : [home, notes, stats, settings]
+  return `<nav class="dock"><div class="glass tabs">${tabs.map((t, i) => tab(t, i === active)).join('')}</div>
+    <button class="glass fab" aria-label="Add">${svg(plus, 28).replace('stroke-width="2"', 'stroke-width="2.4"')}</button></nav>`
+}
+
+document.getElementById('frames').innerHTML = options.map((o) => `
+  <section class="frame ${o.rec ? 'rec' : ''}">
+    <h2>${o.title}${o.rec ? '<span class="badge">Proposed</span>' : ''}</h2>
+    <div class="names">${o.home} · ${o.notes}${o.custom ? ' (custom SVG)' : ''}${o.old ? ' — Home · Stats · Notes · Settings' : ''}</div>
+    <div class="big ${o.old ? 'old' : ''}">
+      <figure>${svg(I[o.home], 44)}Home</figure>
+      <figure>${svg(I[o.notes], 44)}Notes</figure>
+    </div>
+    ${dock(o, 0)}
+    <div style="height:12px"></div>
+    ${dock(o, o.order === 'old' ? 2 : 1)}
+  </section>`).join('')
+</script>
+</body>
+</html>
