@@ -24,7 +24,7 @@ export const usageSchema = `
   create table if not exists api_usage (
     id text primary key,
     user_id text not null references "user"(id) on delete cascade,
-    kind text not null check (kind in ('image', 'audio')),
+    kind text not null check (kind in ('image', 'audio', 'assistant')),
     model text not null,
     created_at timestamptz not null default now(),
     status text not null default 'pending',
@@ -34,6 +34,12 @@ export const usageSchema = `
   );
   create index if not exists api_usage_user_time on api_usage(user_id, created_at);
   create index if not exists api_usage_time on api_usage(created_at);
+  do $$ begin
+    if not exists (select 1 from pg_constraint where conname = 'api_usage_kind_check' and pg_get_constraintdef(oid) like '%assistant%') then
+      alter table api_usage drop constraint if exists api_usage_kind_check;
+      alter table api_usage add constraint api_usage_kind_check check (kind in ('image', 'audio', 'assistant'));
+    end if;
+  end $$;
 `
 
 export function usageRecorder(db: Pick<pg.Pool, 'query'>) {
@@ -82,7 +88,7 @@ export function usageRoutes(db: Pick<pg.Pool, 'query'>, getUser: (r: Request) =>
       select u.id, u.name, u.email,
         count(a.id)::int as calls,
         count(a.id) filter (where a.kind='image')::int as camera,
-        count(a.id) filter (where a.kind='audio')::int as voice,
+        count(a.id) filter (where a.kind in ('audio', 'assistant'))::int as voice,
         count(a.id) filter (where a.cost_nano is null)::int as unknown,
         coalesce(sum(a.cost_nano),0)::text as nano
       from "user" u left join api_usage a on a.user_id=u.id

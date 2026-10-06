@@ -13,6 +13,9 @@ import { Login } from './screens/Login'
 import { Settings } from './screens/Settings'
 import { Categories } from './screens/Categories'
 import { Stats } from './screens/Stats'
+import { NoteSheet, Notes } from './screens/Notes'
+import { Assistant } from './screens/Assistant'
+import { notesRepo } from './lib/notes'
 import { useDesktop } from './lib/useDesktop'
 import { Landing } from './web/Landing'
 import { WebShell } from './web/WebShell'
@@ -43,12 +46,19 @@ function Shell() {
         <Route path="/settings/categories" element={<Categories addRequest={addCategoryRequest} />} />
         <Route path="/add" element={<><Home /><AddSheet /></>} />
         <Route path="/tx/:id" element={<><Home /><AddSheet /></>} />
+        <Route path="/notes" element={<Notes />} />
+        <Route path="/notes/new" element={<><Notes /><NoteSheet /></>} />
+        <Route path="/notes/:id" element={<><Notes /><NoteSheet /></>} />
+        <Route path="/voice" element={<><Home /><Assistant /></>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {bg && (
         <Routes>
           <Route path="/add" element={<AddSheet />} />
           <Route path="/tx/:id" element={<AddSheet />} />
+          <Route path="/notes/new" element={<NoteSheet />} />
+          <Route path="/notes/:id" element={<NoteSheet />} />
+          <Route path="/voice" element={<Assistant />} />
         </Routes>
       )}
       <DeleteFailureNotice />
@@ -127,6 +137,7 @@ export default function App() {
     if (userId) {
       repo.load().catch((e) => console.error('[repo]', e))
       categoryRepo.load(userId).catch((e) => console.error('[categories]', e))
+      notesRepo.load().catch((e) => console.error('[notes]', e))
     }
   }, [userId])
   if (isPending) return null

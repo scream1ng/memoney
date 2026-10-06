@@ -5,7 +5,7 @@ import type { UsageRecorder } from './usage.ts'
 import type { CustomCategory, Guess, TxType } from '../src/lib/types.ts'
 
 const MAX_BYTES = 10 * 1024 * 1024
-const audioTypes: Record<string, string> = {
+export const audioTypes: Record<string, string> = {
   'audio/webm': 'webm', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3',
   'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/ogg': 'ogg',
 }
@@ -18,7 +18,7 @@ const properties = (ids: string[]) => ({
   merchant: { type: ['string', 'null'] },
 })
 
-function validDate(value: unknown): value is string {
+export function validDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
     Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value
 }
