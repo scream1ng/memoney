@@ -53,7 +53,7 @@ export function Usage({ admin = false }: { admin?: boolean }) {
           </div>}
         </>}
       </div>
-      <p className="sub usage-note">New activity only. Voice may use several calls; costs are estimates.</p>
+      <p className="sub usage-note">New activity only. Voice may use two calls; costs are estimates.</p>
     </section>
   )
 }

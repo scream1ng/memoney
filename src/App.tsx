@@ -14,7 +14,6 @@ import { Settings } from './screens/Settings'
 import { Categories } from './screens/Categories'
 import { Stats } from './screens/Stats'
 import { NoteSheet, Notes } from './screens/Notes'
-import { Assistant } from './screens/Assistant'
 import { notesRepo } from './lib/notes'
 import { useDesktop } from './lib/useDesktop'
 import { Landing } from './web/Landing'
@@ -49,7 +48,6 @@ function Shell() {
         <Route path="/notes" element={<Notes />} />
         <Route path="/notes/new" element={<><Notes /><NoteSheet /></>} />
         <Route path="/notes/:id" element={<><Notes /><NoteSheet /></>} />
-        <Route path="/voice" element={<><Home /><Assistant /></>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {bg && (
@@ -58,7 +56,6 @@ function Shell() {
           <Route path="/tx/:id" element={<AddSheet />} />
           <Route path="/notes/new" element={<NoteSheet />} />
           <Route path="/notes/:id" element={<NoteSheet />} />
-          <Route path="/voice" element={<Assistant />} />
         </Routes>
       )}
       <DeleteFailureNotice />

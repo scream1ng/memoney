@@ -5,7 +5,7 @@ import type { UsageRecorder } from './usage.ts'
 import type { CustomCategory, Guess, TxType } from '../src/lib/types.ts'
 
 const MAX_BYTES = 10 * 1024 * 1024
-export const audioTypes: Record<string, string> = {
+const audioTypes: Record<string, string> = {
   'audio/webm': 'webm', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3',
   'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/ogg': 'ogg',
 }
@@ -18,7 +18,7 @@ const properties = (ids: string[]) => ({
   merchant: { type: ['string', 'null'] },
 })
 
-export function validDate(value: unknown): value is string {
+function validDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
     Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value
 }
@@ -74,6 +74,34 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
     await next()
   })
   app.use('*', bodyLimit({ maxSize: MAX_BYTES, onError: (c) => c.json({ error: 'File is too large. Use a smaller photo or shorter recording.' }, 413) }))
+
+  // voice notes: words only, no model call
+  app.post('/transcribe', async (c) => {
+    const key = process.env.OPENAI_API_KEY
+    if (!key) return c.json({ error: 'Voice isn’t configured yet. You can still type your note.' }, 503)
+    let body: FormData
+    try { body = await c.req.formData() } catch { return c.json({ error: 'Invalid upload.' }, 400) }
+    const file = body.get('file')
+    if (!(file instanceof File) || !file.size) return c.json({ error: 'Invalid upload.' }, 400)
+    const mime = file.type.split(';')[0]
+    if (!audioTypes[mime]) return c.json({ error: 'Unsupported recording.' }, 415)
+    const audio = new FormData()
+    audio.set('file', file, `recording.${audioTypes[mime]}`)
+    audio.set('model', 'gpt-4o-mini-transcribe')
+    const signal = AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(60_000)])
+    try {
+      const finish = await record?.(c.get('userId'), 'audio', 'gpt-4o-mini-transcribe')
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: audio, signal })
+      const data = await response.json() as { usage?: unknown; text?: unknown }
+      try { await finish?.(data.usage, response.ok ? 'completed' : 'failed') }
+      catch { console.error('[usage] Could not finalize API usage; cost remains unavailable.') }
+      if (!response.ok) throw new Error(`upstream ${response.status}`)
+      if (typeof data.text !== 'string' || !data.text.trim()) return c.json({ error: 'No speech detected. Try recording again.' }, 422)
+      return c.json({ text: data.text.trim().slice(0, 2000) })
+    } catch {
+      return c.json({ error: signal.aborted ? 'That took too long. Try again.' : 'Couldn’t hear that right now. Try again or type your note.' }, 502)
+    }
+  })
 
   app.post('/', async (c) => {
     const key = process.env.OPENAI_API_KEY

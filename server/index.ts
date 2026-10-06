@@ -11,7 +11,6 @@ import { parseRoutes } from './parse.ts'
 import { pgPhotoStore, photoRoutes, photoSchema } from './photos.ts'
 import { categoryRoutes, categorySchema, pgCategoryStore, saveCategorizedTransaction } from './categories.ts'
 import { noteRoutes, notesSchema, pgNoteStore } from './notes.ts'
-import { assistantRoutes, pgAssistantData } from './assistant.ts'
 
 pg.types.setTypeParser(20, Number) // bigint → number
 pg.types.setTypeParser(1082, (v) => v) // date → 'YYYY-MM-DD'
@@ -78,11 +77,6 @@ app.route('/api/notes', noteRoutes(pgNoteStore(db), async (request) => {
   const session = await auth.api.getSession({ headers: request.headers })
   return session?.user.id
 }))
-
-app.route('/api/assistant', assistantRoutes(async (request) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  return session?.user.id
-}, new URL(baseURL).origin, pgAssistantData(db, (userId) => categoryStore.list(userId)), usageRecorder(db)))
 
 app.route('/api/usage', usageRoutes(db, async (request) => {
   const session = await auth.api.getSession({ headers: request.headers })
