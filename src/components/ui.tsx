@@ -42,7 +42,7 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [menu])
-  const open = (via?: 'camera') => {
+  const open = (via?: 'camera' | 'voice') => {
     setMenu(false) // or Back to this page would show it again
     navigate(via ? `/add?via=${via}` : '/add', { state: { bg: location } })
   }
@@ -53,8 +53,9 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
       : Promise.reject(new Error('Microphone not available'))
     stream.catch(() => {}) // handled by the sheet
     setCapture({ kind: 'audio', stream })
+    if (!isNotes) return open('voice')
     setMenu(false)
-    navigate('/voice', { state: { bg: location } })
+    navigate('/notes/new?via=voice', { state: { bg: location } })
   }
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -106,7 +107,7 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
               <MenuAction label="Manual" icon={PenLine} onClick={() => open()} />
               <MenuAction label="Camera" icon={Camera} onClick={camera} />
             </>}
-            <MenuAction label="Voice" sub="Add or ask anything" icon={Mic} onClick={voice} />
+            <MenuAction label="Voice" icon={Mic} onClick={voice} />
           </div>
         </>
       )}
@@ -115,10 +116,10 @@ export function Dock({ onExport, onAddCategory }: { onExport: () => void; onAddC
   )
 }
 
-function MenuAction({ label, sub, icon: Icon, onClick }: { label: string; sub?: string; icon: LucideIcon; onClick: () => void }) {
+function MenuAction({ label, icon: Icon, onClick }: { label: string; icon: LucideIcon; onClick: () => void }) {
   return (
     <button role="menuitem" className="action" onClick={onClick}>
-      <span className="action-label">{label}{sub && <small>{sub}</small>}</span>
+      <span className="action-label">{label}</span>
       <span className="round"><Icon size={24} /></span>
     </button>
   )

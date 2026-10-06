@@ -1,12 +1,15 @@
 import { ArrowDown, NotebookPen, NotebookText, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import { SwipeRow } from '../components/ui'
 import { useDragClose } from '../hooks/useDragClose'
+import { useRecorder } from '../hooks/useRecorder'
+import { clearCapture, peekCapture } from '../lib/capture'
 import { dayLabel, toDateKey, uid } from '../lib/format'
-import { noteParts, notesRepo, useNotes } from '../lib/notes'
+import { noteParts, notesRepo, transcribe, useNotes } from '../lib/notes'
 import type { Note } from '../lib/types'
+import { VoiceView } from './AddSheet'
 
 const UNDO_MS = 5_000
 const MAX_NOTE = 2000
@@ -112,14 +115,33 @@ function NoteEditor() {
   const existing = useNotes().find((n) => n.id === id)
   const navigate = useNavigate()
   const location = useLocation()
-  // Voice's Edit hands over its proposed text
-  const [text, setText] = useState(existing?.text ?? (location.state as { draft?: string } | null)?.draft ?? '')
+  const [params] = useSearchParams()
+  const [text, setText] = useState(existing?.text ?? '')
   const [draftId] = useState(() => existing?.id ?? uid())
   const [createdAt] = useState(() => existing?.createdAt ?? Date.now())
   const [saving, setSaving] = useState(false)
   const [armDelete, setArmDelete] = useState(false)
   const [error, setError] = useState('')
   const closing = useRef(false)
+  // Voice from the + menu: the mic stream was opened inside the tap
+  const [capture] = useState(() => {
+    const c = peekCapture()
+    return !existing && params.get('via') === 'voice' && c?.kind === 'audio' ? c : undefined
+  })
+  const [voice, setVoice] = useState<'listening' | 'busy' | undefined>(capture && 'listening')
+  const heard = useRef<AbortController>(undefined)
+  const rec = useRecorder(async (audio) => {
+    setVoice('busy')
+    heard.current = new AbortController()
+    try { setText(await transcribe(audio, heard.current.signal)) }
+    catch (e) { if (!heard.current.signal.aborted) setError(e instanceof Error ? e.message : 'Couldn’t hear that. Try again or type your note.') }
+    setVoice(undefined)
+  }, (message) => { setError(message); setVoice(undefined) })
+  // deferred a tick so StrictMode's dev remount doesn't start it twice
+  useEffect(() => {
+    const t = capture && setTimeout(() => void rec.start(capture.stream))
+    return () => { clearTimeout(t); heard.current?.abort(); clearCapture() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const close = () => {
     if (closing.current) return
     closing.current = true
@@ -155,6 +177,11 @@ function NoteEditor() {
       setArmDelete(false)
       setSaving(false)
     }
+  }
+
+  if (voice) {
+    return <VoiceView phase={voice === 'busy' ? 'busy' : rec.phase === 'idle' ? 'requesting' : rec.phase} orbRef={rec.orbRef}
+      onFinish={rec.stop} onCancel={close} title="Voice note" say="Say your note" />
   }
 
   return (

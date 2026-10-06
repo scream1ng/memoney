@@ -13,7 +13,7 @@ import { currencyAtom, repo, useAtom, useTransactions } from '../lib/store'
 import type { TxType } from '../lib/types'
 
 type Field = 'type' | 'amount' | 'date' | 'cat' | 'note' | 'merchant'
-type Phase = 'idle' | 'requesting' | 'rec' | 'busy' | 'failed'
+export type Phase = 'idle' | 'requesting' | 'rec' | 'busy' | 'failed'
 
 const MAX_REC_MS = 30_000
 const SILENCE_MS = 1_000
@@ -131,12 +131,6 @@ function Sheet() {
     })
     return () => clearTimeout(t)
   }, [capture]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // opened from Voice's Edit: start from its guess, marked as guessed
-  useEffect(() => {
-    const draft = (location.state as { draft?: Guess } | null)?.draft
-    if (!id && !capture && draft) apply(draft)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shownAmount = input ? `${symbol}${group(input)}` : money(0, symbol)
   // shrink to fit one line: 46px down to 26px
@@ -513,17 +507,17 @@ function Sheet() {
 }
 
 /** Full-screen listening view for Voice from the + menu. Words come back with the review, not live. */
-function VoiceView({ phase, orbRef, onFinish, onCancel }: {
-  phase: Phase; orbRef: React.RefObject<HTMLDivElement | null>; onFinish: () => void; onCancel: () => void
+export function VoiceView({ phase, orbRef, onFinish, onCancel, title = 'Voice entry', say = 'Say the amount and what it was for' }: {
+  phase: Phase; orbRef: React.RefObject<HTMLDivElement | null>; onFinish: () => void; onCancel: () => void; title?: string; say?: string
 }) {
   const [status, guide] = phase === 'busy'
     ? ['Reading what you said…', 'You can check it before saving']
     : phase === 'requesting'
       ? ['Connecting microphone', 'Allow microphone access']
-      : ['Listening', 'Say the amount and what it was for']
+      : ['Listening', say]
   return (
-    <Modal onDismiss={onCancel} className={`voice-mode ${phase}`} aria-label="Voice entry">
-      <div className="vm-title">Voice entry</div>
+    <Modal onDismiss={onCancel} className={`voice-mode ${phase}`} aria-label={title}>
+      <div className="vm-title">{title}</div>
       <div className="vm-center">
         <div className="orb-wrap" aria-hidden><div ref={orbRef} className="orb" /></div>
         <div className="vm-status" aria-live="polite">{phase === 'rec' && <span className="voice-dot" />}{status}</div>

@@ -232,3 +232,49 @@ it('preserves a paid-for result if finalizing its usage record fails', async () 
     expect(log).toHaveBeenCalledWith('[usage] Could not finalize API usage; cost remains unavailable.')
   } finally { log.mockRestore() }
 })
+
+describe('voice note transcription', () => {
+  const recording = (mime = 'audio/webm', bytes = 'audio') => {
+    const body = new FormData()
+    body.set('file', new Blob([bytes], { type: mime }), 'blob')
+    return { method: 'POST', body, headers: { origin } }
+  }
+
+  it('returns the words only, with one transcription call and no model call', async () => {
+    const finish = vi.fn().mockResolvedValue(undefined)
+    const record = vi.fn().mockResolvedValue(finish)
+    fetchMock.mockResolvedValueOnce(Response.json({ text: '  ซื้อนม\nพรุ่งนี้  ', usage: { input_tokens: 20, output_tokens: 4 } }))
+    const response = await parseRoutes(async () => 'member', origin, record).request('/transcribe', recording())
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ text: 'ซื้อนม\nพรุ่งนี้' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://api.openai.com/v1/audio/transcriptions')
+    expect(options.body.get('file').name).toBe('recording.webm')
+    expect(record).toHaveBeenCalledWith('member', 'audio', 'gpt-4o-mini-transcribe')
+    expect(finish).toHaveBeenCalledWith({ input_tokens: 20, output_tokens: 4 }, 'completed')
+  })
+
+  it('shares the sign-in, origin and rate limit checks', async () => {
+    expect((await parseRoutes(async () => undefined, origin).request('/transcribe', recording())).status).toBe(401)
+    expect((await parseRoutes(async () => 'user', origin).request('/transcribe', { ...recording(), headers: { origin: 'https://other.example' } })).status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects photos and empty files before spending', async () => {
+    const app = parseRoutes(async () => 'user', origin)
+    expect((await app.request('/transcribe', recording('image/jpeg'))).status).toBe(415)
+    expect((await app.request('/transcribe', recording('audio/webm', ''))).status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('reports silence and upstream failures without leaking details', async () => {
+    const app = parseRoutes(async () => 'user', origin)
+    fetchMock.mockResolvedValueOnce(Response.json({ text: '  ' }))
+    expect((await app.request('/transcribe', recording())).status).toBe(422)
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { message: 'secret detail' } }, { status: 500 }))
+    const failed = await app.request('/transcribe', recording())
+    expect(failed.status).toBe(502)
+    expect(JSON.stringify(await failed.json())).not.toContain('secret')
+  })
+})

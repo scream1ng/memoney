@@ -42,6 +42,20 @@ export function useNotes(): Note[] {
   return useSyncExternalStore(notesRepo.subscribe, notesRepo.list)
 }
 
+/** Speech to text for a voice note; nothing is saved. */
+export async function transcribe(audio: Blob, signal?: AbortSignal): Promise<string> {
+  const body = new FormData()
+  body.append('file', audio)
+  const timeout = AbortSignal.timeout(70_000)
+  const r = await fetch('/api/parse/transcribe', { method: 'POST', credentials: 'include', body,
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
+  if (!r.ok) {
+    const error = await r.json().catch(() => ({}))
+    throw new Error(typeof error.error === 'string' ? error.error : 'Couldn’t hear that. Try again or type your note.')
+  }
+  return ((await r.json()) as { text: string }).text
+}
+
 /** First line is the title, the rest the preview. */
 export function noteParts(text: string): [string, string] {
   const [title, ...rest] = text.trim().split('\n')
