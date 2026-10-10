@@ -89,7 +89,7 @@ describe('camera and voice API', () => {
     const [url, options] = fetchMock.mock.calls[0]
     expect(url).toBe('https://api.openai.com/v1/audio/transcriptions')
     expect(options.body.get('file').name).toBe(`recording.${extension}`)
-    expect(options.body.get('model')).toBe('gpt-4o-mini-transcribe')
+    expect(options.body.get('model')).toBe('gpt-4o-transcribe')
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).input[0].content).toEqual([{ type: 'input_text', text: 'กาแฟ 145 บาท' }])
   })
 
@@ -202,7 +202,7 @@ describe('usage attribution', () => {
       .mockResolvedValueOnce(Response.json({ error: 'failed' }, { status: 500 }))
     const app = parseRoutes(async () => 'member', origin, record)
     expect((await app.request('/', upload('audio', 'audio/webm'))).status).toBe(502)
-    expect(record.mock.calls).toEqual([['member', 'audio', 'gpt-4o-mini-transcribe'], ['member', 'audio', 'gpt-6-luna']])
+    expect(record.mock.calls).toEqual([['member', 'audio', 'gpt-4o-transcribe'], ['member', 'audio', 'gpt-6-luna']])
     expect(finish.mock.calls).toEqual([[{ input_tokens: 20, output_tokens: 4 }, 'completed'], [undefined, 'failed']])
   })
   it('records usage before validating an incomplete model result', async () => {
@@ -251,7 +251,7 @@ describe('voice note transcription', () => {
     const [url, options] = fetchMock.mock.calls[0]
     expect(url).toBe('https://api.openai.com/v1/audio/transcriptions')
     expect(options.body.get('file').name).toBe('recording.webm')
-    expect(record).toHaveBeenCalledWith('member', 'audio', 'gpt-4o-mini-transcribe')
+    expect(record).toHaveBeenCalledWith('member', 'audio', 'gpt-4o-transcribe')
     expect(finish).toHaveBeenCalledWith({ input_tokens: 20, output_tokens: 4 }, 'completed')
   })
 

@@ -5,6 +5,8 @@ import type { UsageRecorder } from './usage.ts'
 import type { CustomCategory, Guess, TxType } from '../src/lib/types.ts'
 
 const MAX_BYTES = 10 * 1024 * 1024
+const transcribeModel = 'gpt-4o-transcribe'
+const transcribePrompt = 'Mixed Thai and English speech about money, e.g. กาแฟ 65 บาท, Grab 120, ค่า Netflix'
 const audioTypes: Record<string, string> = {
   'audio/webm': 'webm', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3',
   'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/ogg': 'ogg',
@@ -87,10 +89,11 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
     if (!audioTypes[mime]) return c.json({ error: 'Unsupported recording.' }, 415)
     const audio = new FormData()
     audio.set('file', file, `recording.${audioTypes[mime]}`)
-    audio.set('model', 'gpt-4o-mini-transcribe')
+    audio.set('model', transcribeModel)
+    audio.set('prompt', transcribePrompt)
     const signal = AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(60_000)])
     try {
-      const finish = await record?.(c.get('userId'), 'audio', 'gpt-4o-mini-transcribe')
+      const finish = await record?.(c.get('userId'), 'audio', transcribeModel)
       const response = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: audio, signal })
       const data = await response.json() as { usage?: unknown; text?: unknown }
       try { await finish?.(data.usage, response.ok ? 'completed' : 'failed') }
@@ -154,8 +157,9 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
       if (kind === 'audio') {
         const audio = new FormData()
         audio.set('file', file, `recording.${audioTypes[mime]}`)
-        audio.set('model', 'gpt-4o-mini-transcribe')
-        const transcript = await trackedFetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers, body: audio, signal }, 'gpt-4o-mini-transcribe')
+        audio.set('model', transcribeModel)
+        audio.set('prompt', transcribePrompt)
+        const transcript = await trackedFetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers, body: audio, signal }, transcribeModel)
         if (typeof transcript.text !== 'string' || !transcript.text.trim()) return c.json({ error: 'No speech detected. Try recording again.' }, 422)
         heard = transcript.text.trim().slice(0, 8000)
       }
