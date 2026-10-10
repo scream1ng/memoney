@@ -12,6 +12,7 @@ export function estimate(model: string, raw: unknown) {
   const cached = u?.input_tokens_details?.cached_tokens ?? 0
   const write = u?.input_tokens_details?.cache_write_tokens ?? 0
   if (![cached, write].every((n) => Number.isSafeInteger(n) && n >= 0) || cached + write > input!) return null
+  if (model === 'gpt-4o-transcribe') return { input, output, cached: 0, write: 0, nano: Math.round(input! * 2500 + output! * 10000), rates: [2.5, 10] }
   if (model === 'gpt-4o-mini-transcribe') return { input, output, cached: 0, write: 0, nano: Math.round(input! * 1250 + output! * 5000), rates: [1.25, 5] }
   if (model !== 'gpt-6-luna') return null
   const long = input! > 272_000
