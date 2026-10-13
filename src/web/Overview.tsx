@@ -64,13 +64,13 @@ export function Overview({ selected }: { selected?: string }) {
               <thead><tr><th>Date</th><th>Category</th><th>Note</th><th><span className="sr">Receipt</span></th><th className="amt">Amount</th></tr></thead>
               <tbody>
                 {rows.map((t) => {
-                  const name = t.merchant || category(t.category).label
+                  const name = category(t.category).label
                   return (
                     <tr key={t.id} className={open === t.id ? 'sel' : undefined} tabIndex={0} aria-label={`Edit ${name}`}
                       onClick={() => edit(t.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); edit(t.id) } }}>
                       <td className="muted">{shortDate(t.date)}</td>
                       <td><div className="wd-cc"><CatIcon id={t.category} size={18} />{name}</div></td>
-                      <td className="muted wd-note">{t.note}</td>
+                      <td className="muted wd-note">{[t.merchant, t.note].filter(Boolean).join(' · ')}</td>
                       <td>{t.photoAt && <Paperclip size={14} className="muted" aria-label="Has receipt" />}</td>
                       <td className={`amt num ${t.type === 'income' ? 'inc' : ''}`}>{t.type === 'income' ? '+' : '−'}{money(t.amount, symbol)}</td>
                     </tr>
