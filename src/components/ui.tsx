@@ -154,11 +154,11 @@ export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => voi
             <SwipeRow key={t.id} open={openId === t.id} onOpen={(o) => setOpenId(o ? t.id : undefined)}
               onDelete={() => { setOpenId(undefined); onDelete(t) }}
               onTap={() => (openId ? setOpenId(undefined) : navigate(`/tx/${t.id}`, { state: { bg: location } }))}
-              label={t.merchant || category(t.category).label}>
+              label={category(t.category).label}>
               <CatIcon id={t.category} />
               <div className="grow">
-                <div>{t.merchant || category(t.category).label}</div>
-                {t.note && <div className="sub">{t.note}</div>}
+                <div>{category(t.category).label}</div>
+                {(t.merchant || t.note) && <div className="sub">{[t.merchant, t.note].filter(Boolean).join(' · ')}</div>}
               </div>
               {t.photoAt && <Paperclip size={14} className="clip-mark" aria-label="Has receipt" />}
               <Amount tx={t} />
