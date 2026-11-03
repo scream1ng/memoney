@@ -6,6 +6,12 @@ import { isAdmin } from '../src/lib/access.ts'
 // USD per million tokens, Standard pricing checked 2026-09-28.
 // https://developers.openai.com/api/docs/pricing
 export function estimate(model: string, raw: unknown) {
+  const d = raw as { type?: string; seconds?: number } | undefined
+  if (model === 'gpt-transcribe') {
+    // $0.0045 per audio minute = 75,000 nano-USD per second.
+    if (d?.type !== 'duration' || typeof d.seconds !== 'number' || !Number.isFinite(d.seconds) || d.seconds < 0) return null
+    return { input: d.seconds, output: 0, cached: 0, write: 0, nano: Math.round(d.seconds * 75_000), rates: [0.0045] }
+  }
   const u = raw as { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number } } | undefined
   const input = u?.input_tokens, output = u?.output_tokens
   if (!Number.isSafeInteger(input) || !Number.isSafeInteger(output) || input! < 0 || output! < 0) return null
