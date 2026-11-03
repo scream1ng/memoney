@@ -14,6 +14,8 @@ describe('usage billing', () => {
   it('uses long-context pricing and transcription pricing', () => {
     expect(estimate('gpt-6-luna', { input_tokens: 300000, output_tokens: 1000 })?.nano).toBe(60_750_000)
     expect(estimate('gpt-4o-mini-transcribe', { input_tokens: 1000, output_tokens: 100 })?.nano).toBe(1_750_000)
+    expect(estimate('gpt-transcribe', { type: 'duration', seconds: 60 })?.nano).toBe(4_500_000)
+    expect(estimate('gpt-transcribe', { input_tokens: 1000, output_tokens: 100 })).toBeNull()
   })
   it('keeps missing, invalid and unknown-model costs unavailable', () => {
     expect(estimate('gpt-6-luna', undefined)).toBeNull()

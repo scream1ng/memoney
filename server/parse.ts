@@ -5,8 +5,9 @@ import type { UsageRecorder } from './usage.ts'
 import type { CustomCategory, Guess, TxType } from '../src/lib/types.ts'
 
 const MAX_BYTES = 10 * 1024 * 1024
-const transcribeModel = 'gpt-4o-transcribe'
-const transcribePrompt = 'Mixed Thai and English speech about money, e.g. กาแฟ 65 บาท, Grab 120, ค่า Netflix'
+const transcribeModel = 'gpt-transcribe'
+const transcribePrompt = 'Mixed Thai and English speech about money, e.g. กาแฟ 65 บาท, Grab 120, ค่า Netflix, เซเว่น 7-Eleven 45 บาท'
+const transcribeKeywords = ['7-Eleven', 'เซเว่น', 'Grab', 'บาท']
 const audioTypes: Record<string, string> = {
   'audio/webm': 'webm', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3',
   'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/ogg': 'ogg',
@@ -19,6 +20,16 @@ const properties = (ids: string[]) => ({
   note: { type: ['string', 'null'] },
   merchant: { type: ['string', 'null'] },
 })
+
+function transcribeForm(file: File, extension: string) {
+  const audio = new FormData()
+  audio.set('file', file, `recording.${extension}`)
+  audio.set('model', transcribeModel)
+  audio.set('prompt', transcribePrompt)
+  for (const word of transcribeKeywords) audio.append('keywords[]', word)
+  for (const language of ['th', 'en']) audio.append('languages[]', language)
+  return audio
+}
 
 function validDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
@@ -87,10 +98,7 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
     if (!(file instanceof File) || !file.size) return c.json({ error: 'Invalid upload.' }, 400)
     const mime = file.type.split(';')[0]
     if (!audioTypes[mime]) return c.json({ error: 'Unsupported recording.' }, 415)
-    const audio = new FormData()
-    audio.set('file', file, `recording.${audioTypes[mime]}`)
-    audio.set('model', transcribeModel)
-    audio.set('prompt', transcribePrompt)
+    const audio = transcribeForm(file, audioTypes[mime])
     const signal = AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(60_000)])
     try {
       const finish = await record?.(c.get('userId'), 'audio', transcribeModel)
@@ -155,10 +163,7 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
     try {
       let heard: string | undefined
       if (kind === 'audio') {
-        const audio = new FormData()
-        audio.set('file', file, `recording.${audioTypes[mime]}`)
-        audio.set('model', transcribeModel)
-        audio.set('prompt', transcribePrompt)
+        const audio = transcribeForm(file, audioTypes[mime])
         const transcript = await trackedFetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers, body: audio, signal }, transcribeModel)
         if (typeof transcript.text !== 'string' || !transcript.text.trim()) return c.json({ error: 'No speech detected. Try recording again.' }, 422)
         heard = transcript.text.trim().slice(0, 8000)
@@ -174,6 +179,7 @@ export function parseRoutes(getUserId: (request: Request) => Promise<string | un
 Today in the user's timezone is ${today}. Their currency symbol is ${JSON.stringify(currency)}. Do not convert currencies.
 Understand Thai and English. Convert Buddhist-era years to Gregorian. Resolve spoken relative dates against today. Leave unstated dates null.
 Use the receipt's final total, not cash tendered, change, tax or subtotal. Amount is integer minor units (145 baht = 14500).
+Store names containing numbers are merchants, not amounts: 7-Eleven, 7-11, เซเว่น, เซเว่นอีเลฟเว่น → merchant "7-Eleven"; the amount is the separate price (e.g. "เซเว่น 45 บาท" = 4500).
 Use expense for purchases, income for money received. If the speaker explicitly names an available category, use it even when the purchase would usually fit another category. Otherwise choose a category only when supported by the content. For multiple salary sources, use the payer name or matching clues to select the specific custom category id. Put that id in category, not only in note.
 Categories: ${JSON.stringify(categoryOptions)}.
 Return null for missing or uncertain fields, including category when the source cannot be distinguished. Unrelated content must return all null fields. Note is only for extra detail. Keep note and merchant under 80 characters; preserve the original language.`,
