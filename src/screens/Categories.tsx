@@ -122,14 +122,14 @@ export function CategoryModal({ draft, pending, error, deleteReady, onChange, on
     modal.showModal()
     return () => { modal.close(); trigger?.focus() }
   }, [])
-  return <dialog ref={dialog} className={`glass sheet category-modal${closing ? ' closing' : ''}`} style={drag.style} aria-labelledby="category-modal-title"
+  return <dialog ref={dialog} className={`glass sheet category-modal${closing ? ' closing' : ''}`} aria-labelledby="category-modal-title"
     aria-describedby="category-modal-context" onCancel={(e) => { e.preventDefault(); if (!pending) dismiss() }}
     onClick={(e) => {
       if (pending || closing || e.target !== e.currentTarget) return
       const r = e.currentTarget.getBoundingClientRect()
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dismiss()
     }}>
-    <div className="modal-handle" {...drag.handlers}>
+    <div className="modal-handle" {...drag}>
       <div className="grab" aria-hidden />
       <div className="category-modal-head"><h2 id="category-modal-title">{draft.id ? 'Edit category' : 'New category'}</h2>
         <button type="button" aria-label="Close category" disabled={pending || closing} onClick={dismiss}><X size={20} /></button></div>

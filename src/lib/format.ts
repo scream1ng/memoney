@@ -65,6 +65,13 @@ export function money(minor: number, symbol = ''): string {
   return `${symbol}${nf.format(minor / 100)}`
 }
 
+/** "1250.5" → "1,250.5"; keeps a trailing "." while typing */
+export function groupInput(input: string): string {
+  const [whole, dec] = input.split('.')
+  const g = Number(whole || '0').toLocaleString('en-US')
+  return dec === undefined ? g : `${g}.${dec}`
+}
+
 /** "12.5" → 1250 */
 export function parseAmount(input: string): number {
   const n = Number.parseFloat(input)

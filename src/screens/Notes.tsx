@@ -185,8 +185,8 @@ function NoteEditor() {
   }
 
   return (
-    <Modal onDismiss={close} busy={saving} className="glass sheet nt-sheet" aria-label={existing ? 'Edit note' : 'New note'} style={drag.style}>
-      <div className="handle" {...drag.handlers}>
+    <Modal onDismiss={close} busy={saving} className="glass sheet nt-sheet" aria-label={existing ? 'Edit note' : 'New note'}>
+      <div className="handle" {...drag}>
         <div className="grab" aria-hidden />
         <div className="row between">
           <button className="icon-btn" aria-label="Close note" disabled={saving} onClick={close}><X size={20} /></button>

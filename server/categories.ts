@@ -30,7 +30,8 @@ export interface CategoryStore {
 
 const duplicate = (e: unknown) => (e as { code?: string })?.code === '23505'
 
-export async function saveCategorizedTransaction(db: pg.Pool, userId: string, id: string, tx: Tx): Promise<boolean> {
+/** 'not yours': the id belongs to another account, so nothing was written. */
+export async function saveCategorizedTransaction(db: pg.Pool, userId: string, id: string, tx: Tx): Promise<'ok' | 'unknown category' | 'not yours'> {
   const sql = `insert into transactions (id, user_id, type, amount, category, date, note, merchant, created_at)
     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     on conflict (id) do update set type = $3, amount = $4, category = $5, date = $6, note = $7, merchant = $8
@@ -38,8 +39,7 @@ export async function saveCategorizedTransaction(db: pg.Pool, userId: string, id
   const values = [id, userId, tx.type, tx.amount, tx.category, tx.date,
     tx.note?.slice(0, 80) ?? null, tx.merchant?.slice(0, 80) ?? null, tx.createdAt]
   if (CATEGORIES[tx.type].some((cat) => cat.id === tx.category)) {
-    await db.query(sql, values)
-    return true
+    return (await db.query(sql, values)).rowCount ? 'ok' : 'not yours'
   }
   const client = await db.connect()
   try {
@@ -49,10 +49,10 @@ export async function saveCategorizedTransaction(db: pg.Pool, userId: string, id
       'select 1 from user_categories where id=$1 and user_id=$2 and type=$3 for key share',
       [tx.category, userId, tx.type],
     )
-    if (!rowCount) { await client.query('rollback'); return false }
-    await client.query(sql, values)
+    if (!rowCount) { await client.query('rollback'); return 'unknown category' }
+    const saved = await client.query(sql, values)
     await client.query('commit')
-    return true
+    return saved.rowCount ? 'ok' : 'not yours'
   } catch (error) {
     await client.query('rollback')
     throw error
@@ -96,6 +96,7 @@ export function pgCategoryStore(db: pg.Pool): CategoryStore {
         const used = await client.query('select 1 from transactions where user_id=$1 and category=$2 limit 1', [userId, id])
         if (used.rowCount) { await client.query('rollback'); return 'used' }
         await client.query('delete from user_categories where id=$1 and user_id=$2', [id, userId])
+        await client.query('delete from budgets where category=$1 and user_id=$2', [id, userId])
         await client.query('commit')
         return 'ok'
       } catch (error) {

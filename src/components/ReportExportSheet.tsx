@@ -44,8 +44,8 @@ export function ReportExportSheet({ label, filename, transactions, symbol, onClo
   }
 
   return (
-    <Modal onDismiss={onClose} style={drag.style} className="report-export-sheet" aria-labelledby="report-export-title">
-        <div className="modal-handle" {...drag.handlers}>
+    <Modal onDismiss={onClose} className="report-export-sheet" aria-labelledby="report-export-title">
+        <div className="modal-handle" {...drag}>
           <div className="grab" aria-hidden />
           <div className="report-export-head"><h2 id="report-export-title">Export {label}</h2><button ref={closeRef} aria-label="Close export options" onClick={onClose}><X size={20} /></button></div>
         </div>

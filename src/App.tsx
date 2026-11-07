@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, type Location } from 'react-router-dom'
 import { isAdmin } from './lib/access'
 import { Usage } from './screens/Usage'
 import { Dock } from './components/ui'
 import { PasskeyPrompt } from './components/PasskeyPrompt'
-import { authClient } from './lib/auth'
-import { categoryRepo } from './lib/categories'
+import { authClient, signOut } from './lib/auth'
+import { ACTIVE_KEY, cached, clearCache, IDLE_MS, setCacheUser } from './lib/cache'
 import { deleteFailureAtom, repo, useAtom } from './lib/store'
 import { AddSheet } from './screens/AddSheet'
 import { Home } from './screens/Home'
@@ -14,10 +14,12 @@ import { Settings } from './screens/Settings'
 import { Categories } from './screens/Categories'
 import { Stats } from './screens/Stats'
 import { NoteSheet, Notes } from './screens/Notes'
-import { notesRepo } from './lib/notes'
+import { loadAll, refreshAll } from './lib/sync'
 import { useDesktop } from './lib/useDesktop'
-import { Landing } from './web/Landing'
-import { WebShell } from './web/WebShell'
+
+// phones never load the desktop dashboard or landing page code
+const Landing = lazy(() => import('./web/Landing').then((m) => ({ default: m.Landing })))
+const WebShell = lazy(() => import('./web/WebShell').then((m) => ({ default: m.WebShell })))
 
 function Shell() {
   const location = useLocation()
@@ -83,8 +85,6 @@ function DeleteFailureNotice() {
   </div>
 }
 
-const IDLE_MS = 7 * 24 * 60 * 60_000
-const ACTIVE_KEY = 'memoney.active'
 
 /** Signs out after 7 days without a tap or keypress, counting time the app was closed or in the background. */
 function useIdleLogout(sessionId: string | undefined) {
@@ -103,7 +103,7 @@ function useIdleLogout(sessionId: string | undefined) {
     const check = () => {
       if (out || Date.now() - last <= IDLE_MS) return
       out = true
-      void authClient.signOut().then(() => window.location.reload())
+      void signOut()
     }
     const touch = () => {
       check()
@@ -126,18 +126,30 @@ function useIdleLogout(sessionId: string | undefined) {
 }
 
 export default function App() {
-  const { data, isPending } = authClient.useSession()
-  const userId = data?.user.id
+  const { data, isPending, error } = authClient.useSession()
+  const confirmed = data?.user.id
+  // only the server saying "not signed in" counts; offline or a server error is not an answer
+  const answered = !isPending && (!error || error.status === 401)
+  // until then, open straight to the last account's saved data (also how the app opens offline)
+  const userId = confirmed ?? (answered ? undefined : cached?.user)
   const desktop = useDesktop()
   useIdleLogout(data?.session.id)
   useEffect(() => {
-    if (userId) {
-      repo.load().catch((e) => console.error('[repo]', e))
-      categoryRepo.load(userId).catch((e) => console.error('[categories]', e))
-      notesRepo.load().catch((e) => console.error('[notes]', e))
+    if (!answered) return
+    if (cached && cached.user !== confirmed) {
+      // signed out, expired, or another account: drop the saved data and anything already shown from it
+      clearCache()
+      window.location.reload()
+      return
     }
-  }, [userId])
-  if (isPending) return null
+    if (!confirmed) return
+    setCacheUser(confirmed)
+    void loadAll(confirmed)
+    const onShow = () => { if (document.visibilityState === 'visible') void refreshAll() }
+    document.addEventListener('visibilitychange', onShow)
+    return () => document.removeEventListener('visibilitychange', onShow)
+  }, [confirmed, answered])
+  if (isPending && !userId) return null
   // desktop browsers get the landing page and web dashboard; phones and the installed app keep the mobile UI
-  return <HashRouter>{userId ? desktop ? <WebShell /> : <Shell /> : desktop ? <Landing /> : <Login />}</HashRouter>
+  return <HashRouter><Suspense fallback={null}>{userId ? desktop ? <WebShell /> : <Shell /> : desktop ? <Landing /> : <Login />}</Suspense></HashRouter>
 }

@@ -1,15 +1,14 @@
 import { ChevronDown, LogOut } from 'lucide-react'
-import { authClient } from '../lib/auth'
+import { authClient, signOut } from '../lib/auth'
 import { CURRENCIES, CURRENCY_NAMES } from '../lib/currencies'
+import { settingsRepo } from '../lib/settings'
 import { currencyAtom, useAtom } from '../lib/store'
 
 /** Account, currency and sign-out. Passkeys belong to the phone app; API usage is on the Admin page. */
 export function WebSettings() {
   const { data } = authClient.useSession()
-  const [cur, setCur] = useAtom(currencyAtom)
+  const [cur] = useAtom(currencyAtom)
   const name = data?.user.name || data?.user.email || ''
-  // reload drops the signed-out user's transactions from memory
-  const signOut = () => authClient.signOut().then(() => window.location.reload())
   return (
     <div className="wd-page">
       <header className="wd-top"><h1>Settings</h1></header>
@@ -25,7 +24,7 @@ export function WebSettings() {
           <label className="wd-srow">
             <span className="grow">Currency<small>Shown on amounts and reports</small></span>
             <span className="wd-select">
-              <select value={cur} onChange={(e) => setCur(e.target.value)}>
+              <select value={cur} onChange={(e) => void settingsRepo.setCurrency(e.target.value).catch((err) => console.error('[settings]', err))}>
                 {CURRENCIES.map((c, i) => <option key={c} value={c}>{c ? `${c}  ${CURRENCY_NAMES[i]}` : CURRENCY_NAMES[i]}</option>)}
               </select>
               <ChevronDown size={16} aria-hidden />
