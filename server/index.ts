@@ -11,6 +11,7 @@ import { parseRoutes } from './parse.ts'
 import { pgPhotoStore, photoRoutes, photoSchema } from './photos.ts'
 import { categoryRoutes, categorySchema, pgCategoryStore, saveCategorizedTransaction } from './categories.ts'
 import { noteRoutes, notesSchema, pgNoteStore } from './notes.ts'
+import { pgSettingsStore, settingsRoutes, settingsSchema } from './settings.ts'
 
 pg.types.setTypeParser(20, Number) // bigint → number
 pg.types.setTypeParser(1082, (v) => v) // date → 'YYYY-MM-DD'
@@ -55,6 +56,7 @@ await db.query(usageSchema)
 await db.query(photoSchema)
 await db.query(categorySchema)
 await db.query(notesSchema)
+await db.query(settingsSchema)
 
 const categoryStore = pgCategoryStore(db)
 
@@ -74,6 +76,11 @@ app.route('/api/categories', categoryRoutes(categoryStore, async (request) => {
 }))
 
 app.route('/api/notes', noteRoutes(pgNoteStore(db), async (request) => {
+  const session = await auth.api.getSession({ headers: request.headers })
+  return session?.user.id
+}))
+
+app.route('/api/settings', settingsRoutes(pgSettingsStore(db), async (request) => {
   const session = await auth.api.getSession({ headers: request.headers })
   return session?.user.id
 }))
@@ -112,7 +119,8 @@ app.put('/api/tx/:id', async (c) => {
     Number.isSafeInteger(t.createdAt)
   if (!ok) return c.json({ error: 'invalid' }, 400)
   const saved = await saveCategorizedTransaction(db, c.get('userId'), c.req.param('id'), t)
-  if (!saved) return c.json({ error: 'unknown category' }, 400)
+  if (saved === 'unknown category') return c.json({ error: 'unknown category' }, 400)
+  if (saved === 'not yours') return c.json({ error: 'not found' }, 404)
   return c.body(null, 204)
 })
 

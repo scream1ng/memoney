@@ -46,8 +46,8 @@ export function PasskeyPrompt({ userId }: { userId: string }) {
     }
   }
 
-  return <dialog ref={dialog} className="passkey-prompt" style={drag.style} aria-labelledby="passkey-title" aria-describedby="passkey-description" onCancel={(e) => { e.preventDefault(); if (!busy) dismiss() }}>
-    <div className="modal-handle" {...drag.handlers}>
+  return <dialog ref={dialog} className="passkey-prompt" aria-labelledby="passkey-title" aria-describedby="passkey-description" onCancel={(e) => { e.preventDefault(); if (!busy) dismiss() }}>
+    <div className="modal-handle" {...drag}>
       <Fingerprint size={32} aria-hidden />
       <h2 id="passkey-title">Set up a passkey?</h2>
       <p id="passkey-description">Sign in next time with Face ID, Touch ID, or your device passcode.</p>

@@ -7,7 +7,7 @@ import { TypeToggle } from '../components/ui'
 import { clearCapture, peekCapture, type Capture } from '../lib/capture'
 import { ACTIVE_CATEGORIES, CATEGORIES, categories, category, categoryRepo, useCustomCategories } from '../lib/categories'
 import { toJpeg } from '../lib/image'
-import { amountToInput, dayLabel, money, parseAmount, today, uid } from '../lib/format'
+import { amountToInput, dayLabel, groupInput as group, money, parseAmount, today, uid } from '../lib/format'
 import { parse, type Guess } from '../lib/parse'
 import { currencyAtom, repo, useAtom, useTransactions } from '../lib/store'
 import type { TxType } from '../lib/types'
@@ -18,13 +18,6 @@ export type Phase = 'idle' | 'requesting' | 'rec' | 'busy' | 'failed'
 const MAX_REC_MS = 30_000
 const SILENCE_MS = 1_000
 const NO_SPEECH_MS = 8_000
-
-/** "1250.5" → "1,250.5"; keeps a trailing "." while typing */
-function group(input: string): string {
-  const [whole, dec] = input.split('.')
-  const g = Number(whole || '0').toLocaleString('en-US')
-  return dec === undefined ? g : `${g}.${dec}`
-}
 
 export function AddSheet() {
   const { id } = useParams()
@@ -344,7 +337,7 @@ function Sheet() {
   }
 
   const header = (
-    <div className="handle" {...drag.handlers}>
+    <div className="handle" {...drag}>
       <div className="grab" aria-hidden />
       <div className="row between">
         <label className={`chip ${date !== today() ? 'date-off' : ''} ${h('date')}`} aria-label="Date">
@@ -433,7 +426,7 @@ function Sheet() {
   const dot = <span className="hint-mark" aria-label="Guessed" />
   return (
     <>
-      <Modal onDismiss={close} busy={saving} className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} aria-label={existing ? 'Edit entry' : capture ? 'Review entry' : 'Add entry'} style={drag.style}>
+      <Modal onDismiss={close} busy={saving} className={`glass sheet review-sheet ${sub ? 'behind' : ''}`} aria-label={existing ? 'Edit entry' : capture ? 'Review entry' : 'Add entry'}>
         {header}
         {writeError && <div className="warn" role="alert">{writeError}</div>}
         {saving && <div className="sr" role="status">{armDelete ? 'Deleting entry…' : 'Saving changes…'}</div>}
@@ -535,8 +528,8 @@ export function VoiceView({ phase, orbRef, onFinish, onCancel, title = 'Voice en
 function SubSheet({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
   const drag = useDragClose(onClose)
   return (
-    <Modal onDismiss={onClose} className="glass sheet sub" aria-label={label} style={drag.style}>
-        <div className="handle" {...drag.handlers}>
+    <Modal onDismiss={onClose} className="glass sheet sub" aria-label={label}>
+        <div className="handle" {...drag}>
           <div className="grab" aria-hidden />
           <div className="row between"><h2 className="sheet-title">{label}</h2><button className="icon-btn" aria-label={`Close ${label.toLowerCase()}`} onClick={onClose}><X size={20} /></button></div>
         </div>

@@ -9,8 +9,17 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: { navigateFallbackDenylist: [/^\/api\//] },
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'fonts/NotoSansThai.ttf'],
+      workbox: {
+        navigateFallbackDenylist: [/^\/api\//],
+        // the PDF exporter and its Thai font are only needed on first export, so they aren't part of the install
+        globIgnores: ['**/reportPdf-*.js'],
+        runtimeCaching: [{
+          urlPattern: ({ url }) => /\/assets\/reportPdf-.*\.js$/.test(url.pathname) || url.pathname === '/fonts/NotoSansThai.ttf',
+          handler: 'CacheFirst',
+          options: { cacheName: 'pdf-export', expiration: { maxEntries: 4 } },
+        }],
+      },
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'MeMoney',
         short_name: 'MeMoney',

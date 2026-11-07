@@ -4,6 +4,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useSyncExternalStore } from 'react'
+import { cached, writeCache } from './cache.ts'
 import type { CustomCategory, TxType } from './types.ts'
 
 export interface Category {
@@ -55,7 +56,7 @@ let custom: CustomCategory[] = []
 let grouped: Record<TxType, Category[]> = { expense: CATEGORIES.expense, income: CATEGORIES.income }
 let loaded = false
 let loading: Promise<void> | undefined
-let owner: string | undefined
+let owner: string | undefined = cached?.user
 let generation = 0
 const listeners = new Set<() => void>()
 
@@ -65,8 +66,10 @@ function setCustom(next: CustomCategory[]) {
     expense: [...next.filter((c) => c.type === 'expense').map(toCategory), ...CATEGORIES.expense],
     income: [...next.filter((c) => c.type === 'income').map(toCategory), ...CATEGORIES.income],
   }
+  writeCache('categories', next)
   listeners.forEach((l) => l())
 }
+if (cached?.categories) setCustom(cached.categories)
 
 function toCategory(c: CustomCategory): Category {
   return { id: c.id, label: c.label, icon: ICONS[c.icon] ?? Briefcase, color: c.color }
@@ -101,6 +104,12 @@ export const categoryRepo = {
     const request = loading
     try { await request }
     finally { if (loading === request) loading = undefined }
+  },
+  /** Fetch again, e.g. when the app returns to the foreground. */
+  async refresh(userId?: string) {
+    if (loading) return loading
+    loaded = false
+    return this.load(userId)
   },
   async save(input: Omit<CustomCategory, 'id'>, id?: string) {
     const current = generation

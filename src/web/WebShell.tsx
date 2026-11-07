@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, FileText, Grid2X2, House, LogOut, Settings a
 import { useEffect, useRef, useState } from 'react'
 import { matchPath, Navigate, NavLink, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom'
 import { isAdmin } from '../lib/access'
-import { authClient } from '../lib/auth'
+import { authClient, signOut } from '../lib/auth'
 import { useSelectedPeriod } from '../lib/store'
 import { PeriodToggle } from '../components/ui'
 import { EntryPanel } from './EntryPanel'
@@ -133,7 +133,7 @@ function AccountMenu({ name }: { name: string }) {
       {open && <div className="card wd-menu" role="menu" aria-label="Account">
         <button role="menuitem" onClick={() => { setOpen(false); navigate('/settings') }}><SettingsIcon size={18} />Settings</button>
         {/* reload drops the signed-out user's transactions from memory */}
-        <button role="menuitem" onClick={() => authClient.signOut().then(() => window.location.reload())}><LogOut size={18} />Sign out</button>
+        <button role="menuitem" onClick={() => void signOut()}><LogOut size={18} />Sign out</button>
       </div>}
       <button className="wd-me" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className="wd-avatar" aria-hidden>{name.slice(0, 1).toUpperCase()}</span>

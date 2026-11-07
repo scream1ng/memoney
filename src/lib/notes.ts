@@ -5,6 +5,7 @@ import type { Note } from './types'
 function apiNotes() {
   const listeners = new Set<() => void>()
   let cache: Note[] = []
+  let version = 0 // a list fetched before a write mustn't undo it
   const set = (next: Note[]) => {
     cache = next
     listeners.forEach((l) => l())
@@ -18,15 +19,19 @@ function apiNotes() {
   return {
     list: () => cache,
     async load() {
-      set(await (await call('')).json())
+      const started = version
+      const list = (await (await call('')).json()) as Note[]
+      if (started === version) set(list)
     },
     async save(note: Note) {
       await call(note.id, { method: 'PUT', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ text: note.text, createdAt: note.createdAt, updatedAt: note.updatedAt }) })
+      version++
       set([...cache.filter((n) => n.id !== note.id), note])
     },
     async remove(id: string) {
       await call(id, { method: 'DELETE' })
+      version++
       set(cache.filter((n) => n.id !== id))
     },
     subscribe(fn: () => void) {
