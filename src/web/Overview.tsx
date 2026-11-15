@@ -1,10 +1,10 @@
-import { List, Minus, Paperclip, Plus, Search, Upload as UploadIcon } from 'lucide-react'
+import { Clock, List, Minus, Paperclip, Plus, Search, Upload as UploadIcon } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { CatIcon } from '../components/ui'
 import { category, useCustomCategories } from '../lib/categories'
 import { fromDateKey, money } from '../lib/format'
-import { currencyAtom, totals, useAtom, useSelectedPeriod, useTransactions } from '../lib/store'
+import { currencyAtom, totals, useAtom, useOutbox, useSelectedPeriod, useTransactions } from '../lib/store'
 import type { TxType } from '../lib/types'
 import { addFiles, pending, showReview, useUploads } from './uploads'
 import { PeriodControl } from './WebShell'
@@ -16,6 +16,7 @@ const signed = (n: number, symbol: string) => (n < 0 ? `−${money(-n, symbol)}`
 export function Overview({ selected }: { selected?: string }) {
   useCustomCategories()
   const all = useTransactions()
+  const outbox = useOutbox()
   const navigate = useNavigate()
   const location = useLocation()
   const matched = useMatch('/tx/:id')?.params.id
@@ -71,7 +72,7 @@ export function Overview({ selected }: { selected?: string }) {
                       <td className="muted">{shortDate(t.date)}</td>
                       <td><div className="wd-cc"><CatIcon id={t.category} size={18} />{name}</div></td>
                       <td className="muted wd-note">{[t.merchant, t.note].filter(Boolean).join(' · ')}</td>
-                      <td>{t.photoAt && <Paperclip size={14} className="muted" aria-label="Has receipt" />}</td>
+                      <td>{outbox[t.id] ? <Clock size={14} className={outbox[t.id].failed ? 'exp' : 'muted'} aria-label={outbox[t.id].failed ? "Couldn't sync" : 'Waiting to sync'} /> : t.photoAt && <Paperclip size={14} className="muted" aria-label="Has receipt" />}</td>
                       <td className={`amt num ${t.type === 'income' ? 'inc' : ''}`}>{t.type === 'income' ? '+' : '−'}{money(t.amount, symbol)}</td>
                     </tr>
                   )

@@ -1,6 +1,6 @@
 # MeMoney design system
 
-iOS light look. Plain grouped grey background with white cards. Frosted glass is used on the dock, FAB and transaction sheets; Currency and Report Export use opaque bottom sheets.
+iOS look, light by default; dark follows the system (`prefers-color-scheme`) with iOS dark system colors — every token below has a dark value in the `@media (prefers-color-scheme: dark)` block in `styles.css`, so never hardcode a color. Plain grouped grey background with white cards. Frosted glass is used on the dock, FAB and transaction sheets; Currency and Report Export use opaque bottom sheets.
 All styles live in `src/styles.css`, with shared components in `src/components/ui.tsx`. There is no CSS framework, so reuse the existing classes.
 
 ## Tokens
@@ -21,9 +21,12 @@ All styles live in `src/styles.css`, with shared components in `src/components/u
 | `--exp` | `#d70015` | expense, destructive, recording, errors |
 | `--inc` | `#248a3d` | income |
 | `--note` | `#b07000` | note field tile icon (amber; kept off `--accent` blue so it never reads as a category) |
-| `--glass-bg` | `rgba(255,255,255,.62)` (sheet: `rgba(242,242,247,.9)`) | `.glass` surfaces |
-| pressed row/key | `#e5e5ea` | `:active` on `.tx`/`.key` (hardcoded) |
-| grab handle | `#c7c7cc` | `.grab` (hardcoded) |
+| `--glass-bg` | `rgba(255,255,255,.62)` | `.glass` surfaces |
+| `--sheet-bg` | `rgba(242,242,247,.9)` | `.glass` on `.sheet` |
+| `--glass-edge` | `rgba(255,255,255,.9)` | top highlight on `.glass` |
+| `--pressed` | `#e5e5ea` | `:active` on `.tx`/`.key` |
+| `--grab` | `#c7c7cc` | `.grab` handle |
+| `--seg-on` | `#fff` (dark `#636366`) | selected segment in `.seg` / `.wd-typeseg` |
 
 Tints are `color-mix(in srgb, var(--x) N%, transparent)`:
 - hint background is accent at 14–18%;
