@@ -1,11 +1,11 @@
-import { Camera, Download, Mic, NotebookPen, NotebookText, Paperclip, PenLine, Plus, Settings, Wallet, type LucideIcon } from 'lucide-react'
+import { Camera, Clock, Download, Mic, NotebookPen, NotebookText, Paperclip, PenLine, Plus, Settings, Wallet, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useDeleteTap } from '../hooks/useDeleteTap'
 import { setCapture } from '../lib/capture'
 import { category, useCustomCategories } from '../lib/categories'
 import { dayLabel, money } from '../lib/format'
-import { currencyAtom, useAtom, type Period } from '../lib/store'
+import { currencyAtom, useAtom, useOutbox, type Period } from '../lib/store'
 import type { Tx, TxType } from '../lib/types'
 
 export function CatIcon({ id, size = 22 }: { id: string; size?: number }) {
@@ -135,6 +135,7 @@ const REVEAL = 96
 
 export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => void }) {
   useCustomCategories()
+  const outbox = useOutbox()
   const navigate = useNavigate()
   const location = useLocation()
   // only one row stays open; deleting needs a tap on Delete, never just a long swipe
@@ -150,7 +151,7 @@ export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => voi
       {groups.map(([date, items]) => (
         <section key={date}>
           <div className="day">{dayLabel(date)}</div>
-          {items.map((t) => (
+          {items.map((t) => { const waiting = outbox[t.id]; return (
             <SwipeRow key={t.id} open={openId === t.id} onOpen={(o) => setOpenId(o ? t.id : undefined)}
               onDelete={() => { setOpenId(undefined); onDelete(t) }}
               onTap={() => (openId ? setOpenId(undefined) : navigate(`/tx/${t.id}`, { state: { bg: location } }))}
@@ -158,12 +159,16 @@ export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => voi
               <CatIcon id={t.category} />
               <div className="grow">
                 <div>{category(t.category).label}</div>
-                {(t.merchant || t.note) && <div className="sub">{[t.merchant, t.note].filter(Boolean).join(' · ')}</div>}
+                {(t.merchant || t.note || waiting) && <div className="sub">
+                  {waiting && <span className={waiting.failed ? 'exp' : undefined}>{waiting.failed ? "Couldn't sync · tap to fix" : 'Waiting to sync'}{(t.merchant || t.note) && ' · '}</span>}
+                  {[t.merchant, t.note].filter(Boolean).join(' · ')}
+                </div>}
               </div>
               {t.photoAt && <Paperclip size={14} className="clip-mark" aria-label="Has receipt" />}
+              {waiting && <Clock size={14} className="clip-mark" aria-hidden />}
               <Amount tx={t} />
             </SwipeRow>
-          ))}
+          ) })}
         </section>
       ))}
     </div>

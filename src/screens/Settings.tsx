@@ -7,11 +7,14 @@ import { Usage } from './Usage'
 import { authClient, signOut } from '../lib/auth'
 import { CURRENCIES, CURRENCY_NAMES } from '../lib/currencies'
 import { settingsRepo } from '../lib/settings'
-import { currencyAtom, useAtom } from '../lib/store'
+import { currencyAtom, useAtom, useOutbox } from '../lib/store'
 
 export function Settings({ admin }: { admin: boolean }) {
   const navigate = useNavigate()
   const [cur] = useAtom(currencyAtom)
+  const unsynced = Object.keys(useOutbox()).length
+  const [armed, setArmSignOut] = useState(false)
+  const armSignOut = armed && unsynced > 0 // synced meanwhile: no need to warn any more
   const [open, setOpen] = useState(false)
   const drag = useDragClose(() => setOpen(false))
   const [added, setAdded] = useState(false)
@@ -58,10 +61,11 @@ export function Settings({ admin }: { admin: boolean }) {
       {passkeyError && <p className="warn" role="alert">{passkeyError}</p>}
       {adding && <p className="sr" role="status">Setting up passkey…</p>}
       <section className="card set">
-        <button className="row danger" onClick={signOut}>
-          <span className="ico" style={{ background: 'var(--exp)' }}><LogOut size={18} /></span>Sign out
+        <button className="row danger" onClick={() => (unsynced && !armSignOut ? setArmSignOut(true) : void signOut())}>
+          <span className="ico" style={{ background: 'var(--exp)' }}><LogOut size={18} /></span>{armSignOut ? 'Sign out anyway' : 'Sign out'}
         </button>
       </section>
+      {armSignOut && <p className="warn" role="alert">{unsynced === 1 ? '1 change hasn’t' : `${unsynced} changes haven’t`} synced yet and will be lost if you sign out now.</p>}
       {open && <Modal onDismiss={() => setOpen(false)} className="currency-sheet" aria-labelledby="currency-title">
           <div className="modal-handle" {...drag}>
             <div className="grab" aria-hidden />

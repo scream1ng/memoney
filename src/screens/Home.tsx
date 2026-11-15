@@ -1,12 +1,12 @@
-import { ArrowDown, ChevronLeft, ChevronRight, List, Minus, Plus, RefreshCw, Search, Wallet } from 'lucide-react'
+import { ArrowDown, ChevronLeft, ChevronRight, CloudOff, List, Minus, Plus, RefreshCw, Search, Wallet } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PeriodToggle, TxList } from '../components/ui'
 import { usePeriodSwipe } from '../hooks/usePeriodSwipe'
 import { usePullRefresh } from '../hooks/usePullRefresh'
-import { useCustomCategories } from '../lib/categories'
+import { category, useCustomCategories } from '../lib/categories'
 import { money } from '../lib/format'
-import { currencyAtom, deleteFailureAtom, repo, search, totals, useAtom, useSelectedPeriod, useTransactions } from '../lib/store'
+import { currencyAtom, deleteFailureAtom, expenseByCategory, repo, search, totals, useAtom, useOnline, useOutbox, useSelectedPeriod, useTransactions } from '../lib/store'
 import { refreshAll } from '../lib/sync'
 import type { Tx, TxType } from '../lib/types'
 
@@ -34,6 +34,7 @@ export function Home() {
   return (
     <main className="screen">
       {pullSpinner}
+      <SyncPill />
       <div className="period-swipe" {...swipe.handlers}>
         <div className={`row between month${sel.period === 'week' ? ' week' : ''}`}>
           <h1>{sel.title}</h1>
@@ -49,6 +50,7 @@ export function Home() {
             <span className="num inc" aria-label="Income">+{money(t.income, symbol)}</span>
             <span className="num exp" aria-label="Expense">−{money(t.expense, symbol)}</span>
           </div>
+          {t.expense > 0 && <SpendSplit txs={periodTxs} expense={t.expense} />}
         </section>
       </div>
       <div className="row between period-controls">
@@ -65,6 +67,38 @@ export function Home() {
         onClear={periodTxs.length ? () => setFilter('all') : undefined} />}
       {undo.hidden && <UndoBar undo={undo} />}
     </main>
+  )
+}
+
+/** Shown while offline or while changes are waiting; tapping retries now. */
+function SyncPill() {
+  const online = useOnline()
+  const ops = Object.values(useOutbox())
+  const failed = ops.filter((o) => o.failed).length
+  if (online && !ops.length) return null
+  const waiting = ops.length - failed
+  const text = failed ? `${failed} couldn't sync · tap the entry to fix`
+    : !online ? (waiting ? `Offline · ${waiting} waiting to sync` : 'Offline · entries save on this phone')
+    : `${waiting} waiting to sync · tap to retry`
+  return <button className={`glass sync-pill${failed ? ' exp' : ''}`} onClick={() => void refreshAll(true)}>
+    <CloudOff size={14} aria-hidden />{text}
+  </button>
+}
+
+/** Where this period's spending went: one stacked bar plus the top three categories. */
+function SpendSplit({ txs, expense }: { txs: Tx[]; expense: number }) {
+  useCustomCategories()
+  const rows = [...expenseByCategory(txs)].sort((a, b) => b[1] - a[1])
+  const pct = (amount: number) => Math.round((amount / expense) * 100)
+  return (
+    <div className="spend-split">
+      <div className="spend-bar" aria-hidden>
+        {rows.map(([id, amount]) => <span key={id} style={{ flexGrow: amount, background: category(id).color }} />)}
+      </div>
+      <div className="spend-legend" aria-label="Top spending">
+        {rows.slice(0, 3).map(([id, amount]) => <span key={id}><i style={{ background: category(id).color }} />{category(id).label} {pct(amount)}%</span>)}
+      </div>
+    </div>
   )
 }
 

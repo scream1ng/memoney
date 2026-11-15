@@ -9,7 +9,7 @@ import { ACTIVE_CATEGORIES, CATEGORIES, categories, category, categoryRepo, useC
 import { toJpeg } from '../lib/image'
 import { amountToInput, dayLabel, groupInput as group, money, parseAmount, today, uid } from '../lib/format'
 import { parse, type Guess } from '../lib/parse'
-import { currencyAtom, repo, useAtom, useTransactions } from '../lib/store'
+import { currencyAtom, isOffline, repo, useAtom, useTransactions } from '../lib/store'
 import type { TxType } from '../lib/types'
 
 type Field = 'type' | 'amount' | 'date' | 'cat' | 'note' | 'merchant'
@@ -308,8 +308,10 @@ function Sheet() {
       }, photo === null && !existing?.photoAt ? undefined : photo)
       writing.current = false
       close()
-    } catch {
-      setWriteError('Could not confirm saving your entry. Your changes are still here. Try again.')
+    } catch (err) {
+      setWriteError(!isOffline(err) ? 'Could not confirm saving your entry. Your changes are still here. Try again.'
+        : photo ? 'No connection. An entry with a receipt photo needs signal to save. Try again when you’re back online, or remove the photo to save it on this phone.'
+        : 'No connection. Removing a receipt photo needs signal. Try again when you’re back online.')
     } finally { writing.current = false; if (alive.current) setSaving(false) }
   }
 

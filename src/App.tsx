@@ -146,8 +146,14 @@ export default function App() {
     setCacheUser(confirmed)
     void loadAll(confirmed)
     const onShow = () => { if (document.visibilityState === 'visible') void refreshAll() }
+    // back online: send entries saved while offline
+    const onOnline = () => void refreshAll(true)
     document.addEventListener('visibilitychange', onShow)
-    return () => document.removeEventListener('visibilitychange', onShow)
+    window.addEventListener('online', onOnline)
+    return () => {
+      document.removeEventListener('visibilitychange', onShow)
+      window.removeEventListener('online', onOnline)
+    }
   }, [confirmed, answered])
   if (isPending && !userId) return null
   // desktop browsers get the landing page and web dashboard; phones and the installed app keep the mobile UI

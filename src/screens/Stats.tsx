@@ -7,14 +7,7 @@ import { usePeriodSwipe } from '../hooks/usePeriodSwipe'
 import { category, useCustomCategories } from '../lib/categories'
 import { fromDateKey, money } from '../lib/format'
 import { useBudgets } from '../lib/settings'
-import { currencyAtom, inRange, previousRange, totals, useAtom, useSelectedPeriod, useTransactions } from '../lib/store'
-import type { Tx } from '../lib/types'
-
-const expenseByCategory = (txs: Tx[]) => {
-  const sums = new Map<string, number>()
-  for (const tx of txs) if (tx.type === 'expense') sums.set(tx.category, (sums.get(tx.category) ?? 0) + tx.amount)
-  return sums
-}
+import { currencyAtom, expenseByCategory, inRange, previousRange, totals, useAtom, useSelectedPeriod, useTransactions } from '../lib/store'
 
 /** ↑ 12% when spending went up (red), ↓ when down (green); nothing when there's no earlier spending to compare with. */
 function Delta({ now, before, label }: { now: number; before: number; label?: string }) {

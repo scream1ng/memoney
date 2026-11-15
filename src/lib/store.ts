@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { cached, writeCache } from './cache.ts'
+import { cached, writeCache, type OutboxOp } from './cache.ts'
 import { category } from './categories'
 import type { Tx } from './types'
 import { dayLabel, fromDateKey, monthKey, monthLabel, shiftDay, shiftMonth, shiftWeek, today, weekLabel, weekStart } from './format'
@@ -12,36 +12,108 @@ export interface TxRepo {
   subscribe(fn: () => void): () => void
 }
 
-/** Server-backed; publish writes only after the server confirms them. */
-function apiRepo(): TxRepo & { load(): Promise<void> } {
+/** fetch rejects with a TypeError only when the request never reached a server: no signal, DNS, connection dropped. */
+export const isOffline = (err: unknown) => err instanceof TypeError
+
+class HttpError extends Error {
+  status: number
+  constructor(status: number, path: string) { super(`${status} ${path}`); this.status = status }
+}
+/** Worth trying again later: no connection, signed out (401/403), or the server is down (5xx), rather than refusing the change itself. */
+const retryLater = (err: unknown) => isOffline(err) || (err instanceof HttpError && (err.status >= 500 || err.status === 401 || err.status === 403))
+
+/**
+ * Server-backed; publish writes only after the server confirms them.
+ * With no connection, entries (without a photo) and deletes wait in an outbox on this phone,
+ * show at once, and are sent on the next load (start, return to the app, pull-to-refresh, back online).
+ */
+function apiRepo(): TxRepo & { load(): Promise<void>; outbox(): Record<string, OutboxOp>; flush(): Promise<void> } {
   const listeners = new Set<() => void>()
-  let cache: Tx[] = cached?.tx ?? []
+  let server: Tx[] = cached?.tx ?? []
+  let outbox: Record<string, OutboxOp> = cached?.outbox ?? {}
+  // what the screens show: the server's list with the waiting changes laid over it
+  const overlay = () => [
+    ...server.filter((t) => !outbox[t.id]),
+    ...Object.values(outbox).flatMap((o) => (o.op === 'put' ? [o.tx] : [])),
+  ]
+  let view = overlay()
   // bumped by every confirmed write, so a list fetched before the write can't undo it
   let version = 0
-  const set = (next: Tx[]) => {
-    cache = next
-    writeCache('tx', next)
+  const publish = () => {
+    view = overlay()
     listeners.forEach((l) => l())
+  }
+  const setServer = (next: Tx[]) => {
+    server = next
+    writeCache('tx', next)
+    publish()
+  }
+  const setOutbox = (next: Record<string, OutboxOp>) => {
+    outbox = next
+    writeCache('outbox', next)
+    publish()
+  }
+  const without = (id: string) => {
+    const { [id]: _, ...rest } = outbox
+    return rest
   }
   const call = (path: string, init?: RequestInit) =>
     fetch(`/api/tx/${path}`, { credentials: 'include', ...init }).then((r) => {
-      if (!r.ok) throw new Error(`${r.status} ${path}`)
+      if (!r.ok) throw new HttpError(r.status, path)
       return r
     })
   const put = (tx: Tx) =>
     call(tx.id, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(tx) })
+  const del = (id: string) => call(id, { method: 'DELETE' })
+
+  let flushing: Promise<void> | undefined
+  /** Sends waiting changes one by one; stops at the first sign of still being offline. */
+  const send = async () => {
+    for (const [id, o] of Object.entries(outbox)) {
+      if (outbox[id] !== o) continue // changed again while sending: the newer one goes next time
+      try {
+        if (o.op === 'put') await put(o.tx)
+        else await del(id).catch((err: unknown) => { if (!(err instanceof HttpError && err.status === 404)) throw err }) // already gone
+      } catch (err) {
+        if (retryLater(err)) return
+        if (outbox[id] !== o) continue
+        // a refused entry (e.g. its category was deleted) stays, marked, so the user can fix it;
+        // a refused delete is dropped, so the entry shows again rather than vanishing for good
+        setOutbox(o.op === 'put' ? { ...outbox, [id]: { ...o, failed: true } } : without(id))
+        continue
+      }
+      version++
+      if (outbox[id] === o) outbox = without(id)
+      setServer(o.op === 'put' ? [...server.filter((t) => t.id !== id), o.tx] : server.filter((t) => t.id !== id))
+      writeCache('outbox', outbox)
+    }
+  }
+  // set before clearing, so an empty outbox can't leave a finished promise stuck in `flushing`
+  const flush = () => flushing ??= send().finally(() => { flushing = undefined })
 
   const repo = {
-    list: () => cache,
+    list: () => view,
+    outbox: () => outbox,
+    flush,
     async load() {
       await importLocal(put)
+      await flush()
       const started = version
       const list = (await (await call('')).json()) as Tx[]
-      if (started === version) set(list)
+      if (started === version) setServer(list)
     },
     async save(tx: Tx, photo?: Blob | null) {
       let saved = photo === null ? { ...tx, photoAt: undefined } : tx
-      await put(tx)
+      // an older copy of this entry may be on its way up; let it land first so this one wins
+      await flushing
+      try {
+        await put(tx)
+      } catch (err) {
+        // a photo can't wait on the phone, so only plain entries are kept for later
+        if (!isOffline(err) || photo !== undefined) throw err
+        setOutbox({ ...outbox, [tx.id]: { op: 'put', tx } })
+        return
+      }
       // the photo row points at the transaction, so it goes up only after the transaction exists
       if (photo === null) await call(`${tx.id}/photo`, { method: 'DELETE' })
       else if (photo !== undefined) {
@@ -51,12 +123,26 @@ function apiRepo(): TxRepo & { load(): Promise<void> } {
         saved = { ...saved, photoAt }
       }
       version++
-      set([...cache.filter((t) => t.id !== tx.id), saved])
+      outbox = without(tx.id)
+      writeCache('outbox', outbox)
+      setServer([...server.filter((t) => t.id !== tx.id), saved])
     },
     async remove(id: string) {
-      await call(id, { method: 'DELETE' })
+      // never reached the server: dropping it from the outbox is the whole delete
+      // a copy of it may be on its way up right now; wait, so the delete goes after it
+      await flushing
+      if (outbox[id] && !server.some((t) => t.id === id)) return setOutbox(without(id))
+      try {
+        await del(id)
+      } catch (err) {
+        if (!isOffline(err)) throw err
+        setOutbox({ ...outbox, [id]: { op: 'delete' } })
+        return
+      }
       version++
-      set(cache.filter((t) => t.id !== id))
+      outbox = without(id)
+      writeCache('outbox', outbox)
+      setServer(server.filter((t) => t.id !== id))
     },
     subscribe(fn: () => void) {
       listeners.add(fn)
@@ -88,6 +174,20 @@ export function useTransactions(): Tx[] {
   return useSyncExternalStore(repo.subscribe, repo.list)
 }
 
+const subscribeOnline = (fn: () => void) => {
+  window.addEventListener('online', fn)
+  window.addEventListener('offline', fn)
+  return () => { window.removeEventListener('online', fn); window.removeEventListener('offline', fn) }
+}
+export function useOnline(): boolean {
+  return useSyncExternalStore(subscribeOnline, () => navigator.onLine)
+}
+
+/** Changes waiting to be sent, by transaction id. */
+export function useOutbox(): Record<string, OutboxOp> {
+  return useSyncExternalStore(repo.subscribe, repo.outbox)
+}
+
 export function forMonth(txs: Tx[], month: string): Tx[] {
   return txs.filter((t) => monthKey(t.date) === month).sort(byNewest)
 }
@@ -110,6 +210,12 @@ export function matchesQuery(t: Tx, query: string): boolean {
 /** Every entry matching the search, newest first, across all time. */
 export function search(txs: Tx[], query: string): Tx[] {
   return txs.filter((t) => matchesQuery(t, query)).sort(byNewest)
+}
+
+export function expenseByCategory(txs: Tx[]) {
+  const sums = new Map<string, number>()
+  for (const tx of txs) if (tx.type === 'expense') sums.set(tx.category, (sums.get(tx.category) ?? 0) + tx.amount)
+  return sums
 }
 
 export function totals(txs: Tx[]) {
