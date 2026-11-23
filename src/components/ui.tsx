@@ -150,7 +150,11 @@ export function TxList({ txs, onDelete }: { txs: Tx[]; onDelete: (tx: Tx) => voi
     <div className="card list">
       {groups.map(([date, items]) => (
         <section key={date}>
-          <div className="day">{dayLabel(date)}</div>
+          <div className="day">
+            {dayLabel(date)}
+            {(() => { const net = items.reduce((n, t) => n + (t.type === 'income' ? t.amount : -t.amount), 0)
+              return <Amount tx={{ type: net > 0 ? 'income' : 'expense', amount: Math.abs(net) }} /> })()}
+          </div>
           {items.map((t) => { const waiting = outbox[t.id]; return (
             <SwipeRow key={t.id} open={openId === t.id} onOpen={(o) => setOpenId(o ? t.id : undefined)}
               onDelete={() => { setOpenId(undefined); onDelete(t) }}
